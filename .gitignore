@@ -1,6 +1,8 @@
 # CodeGraph index
 .codegraph/
 
+# Node / codegraph tool artifacts (not project code)
+node_modules/
 # Python
 __pycache__/
 *.py[cod]
