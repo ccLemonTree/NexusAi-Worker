@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 
 from api.infer.Utils.class_info import CameraInfo
-from apps.Cangqiong_Smart_Analyse.analyse import _run_analyse_sync, executor
+from api.infer.running import _run_analyse_sync, logic_executor as executor
 from kafka.message import AnalyseInputMsg, AnalyseResultMsg, LabelResult
 from tools.init import chat_infer, cfg, client
 from tools.logger_tools import Kafka_Handler_logger as logger

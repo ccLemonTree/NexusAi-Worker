@@ -1,9 +1,14 @@
 
-from tools.init import  tritonServer
-from api.infer.Utils.result_utils import *
-from tools.concurrency import get_inference_executor
+import copy
 
-executor = get_inference_executor()
+from tools.init import tritonServer
+from api.infer.Utils.result_utils import *
+from tools.concurrency import get_inference_executor, get_logic_executor
+from tools.logger_tools import CangQiong_Smart_Model_logger as logger
+
+executor       = get_inference_executor()   # analyseRun 用
+logic_executor = get_logic_executor()       # _run_analyse_sync 用
+
 from tools.init import cfg
 from api.infer.Utils.analyse_utils import LabelToModel
 from api.infer.Utils.boundingbox import BoundingBox
@@ -80,4 +85,70 @@ def analyseRun(setsLabel, imgs, camerInfo=CameraInfo(),label_rules={},roi=None, 
         for key,value in logic_result.items():
             boxes = firstResult + value['bbox']
     return boxes
+
+
+def _run_analyse_sync(camerInfo, setsLabel, label_rules):
+    """
+    Kafka worker 调用的同步推理入口（原位于 apps/Cangqiong_Smart_Analyse/analyse.py）。
+    在 ThreadPoolExecutor 中运行，非协程。
+    """
+    logicLabels = list(cfg.logicModelDict.keys())
+    unlogicAnalysis = set()
+    logicAnalysis = set()
+
+    for lab in setsLabel:
+        if lab in logicLabels:
+            for i in cfg.logicModelDict[lab][0]["label"]:
+                logicAnalysis.add(i)
+        else:
+            unlogicAnalysis.add(lab)
+
+    firstAnalysis = unlogicAnalysis | logicAnalysis
+    firstResult = analyseRun(firstAnalysis, camerInfo.imgsList, camerInfo, label_rules)
+
+    fuctureList = []
+    logicAnalysisDict = {}
+    unlogicAnalysisList = []
+
+    for lab in setsLabel:
+        logicFlag = lab in logicLabels
+        comparisonList = cfg.logicModelDict[lab][0]["label"] if logicFlag else [lab]
+        firstResultInLogic = [
+            b for b in firstResult
+            if (b.classname in comparisonList) or (b.classname in logicLabels)
+        ]
+        if logicFlag:
+            logicResultList = logicAnalysisDict.get(lab, [])
+            logicResultList.extend(firstResultInLogic)
+            logicAnalysisDict[lab] = logicResultList
+        else:
+            unlogicAnalysisList.extend(firstResultInLogic)
+
+    for key, boundingboxs in logicAnalysisDict.items():
+        fuctureList.append(logic_executor.submit(
+            logic_run, camerInfo.imgsList, copy.deepcopy(boundingboxs),
+            camerInfo, key, tritonServer, label_rules))
+
+    logicResults = []
+    for fucture in fuctureList:
+        result = fucture.result()
+        if len(list(result.values())[0]['bbox']) == 0:
+            continue
+        for key, value in result.items():
+            for i in range(len(value['bbox'])):
+                value['bbox'][i] = value['bbox'][i].dict()
+        logicResults.append(result)
+
+    unlogicAnalysisDict = {}
+    for info in unlogicAnalysisList:
+        if info.classname in setsLabel:
+            get_unlogic_result = unlogicAnalysisDict.get(info.classname, [])
+            get_unlogic_result.append(info.dict())
+            unlogicAnalysisDict[info.classname] = get_unlogic_result
+
+    unlogicAnalysisDicts = {k: {'bbox': v, "imglist": []} for k, v in unlogicAnalysisDict.items()}
+    for i in logicResults:
+        unlogicAnalysisDicts.update(i)
+
+    return unlogicAnalysisDicts
 
