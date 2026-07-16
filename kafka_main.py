@@ -25,8 +25,6 @@ K8s Deployment 示例:
 """
 
 import asyncio
-import logging
-import os
 import pathlib
 
 from dotenv import load_dotenv
@@ -35,13 +33,9 @@ from dotenv import load_dotenv
 _env_path = pathlib.Path(__file__).parent / ".env"
 load_dotenv(_env_path, override=False)
 
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
-
-logger = logging.getLogger(__name__)
+# logger_tools 已在模块级完成 FileHandler + StreamHandler 的注册，
+# 不再调用 basicConfig，避免与现有日志配置冲突。
+from tools.logger_tools import Kafka_Consumer_logger as logger
 
 
 def main() -> None:

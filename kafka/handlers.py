@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import json
 import logging
@@ -15,8 +13,7 @@ from api.infer.Utils.class_info import CameraInfo
 from apps.Cangqiong_Smart_Analyse.analyse import _run_analyse_sync, executor
 from kafka.message import AnalyseInputMsg, AnalyseResultMsg, LabelResult
 from tools.init import chat_infer, cfg, client
-
-logger = logging.getLogger(__name__)
+from tools.logger_tools import Kafka_Handler_logger as logger
 
 
 def _now_iso() -> str:

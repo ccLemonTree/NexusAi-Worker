@@ -11,8 +11,7 @@ from aiokafka.structs import TopicPartition
 
 from kafka.handlers import process_message
 from kafka.producer import send_result, stop_producer
-
-logger = logging.getLogger(__name__)
+from tools.logger_tools import Kafka_Consumer_logger as logger
 
 KAFKA_BOOTSTRAP     = os.getenv("KAFKA_BOOTSTRAP",      "192.168.1.115:9092")
 KAFKA_INPUT_TOPIC   = os.getenv("KAFKA_INPUT_TOPIC",    "model_analyse")

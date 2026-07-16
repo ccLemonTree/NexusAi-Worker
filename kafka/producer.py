@@ -5,8 +5,7 @@ import logging
 import os
 
 from aiokafka import AIOKafkaProducer
-
-logger = logging.getLogger(__name__)
+from tools.logger_tools import Kafka_Producer_logger as logger
 
 _producer: AIOKafkaProducer | None = None
 

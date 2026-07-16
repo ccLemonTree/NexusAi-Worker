@@ -59,6 +59,11 @@ request_logger = setup_logger("request", "request.log")
 # 创建错误日志器（只记录ERROR级别以上的日志）
 error_logger = setup_logger("error", "error.log", logging.ERROR)
 
+# Kafka Worker 日志
+Kafka_Consumer_logger = setup_logger("kafka_consumer", "kafka_consumer.log")
+Kafka_Handler_logger  = setup_logger("kafka_handler",  "kafka_handler.log")
+Kafka_Producer_logger = setup_logger("kafka_producer", "kafka_producer.log")
+
 
 # FastAPI启动时配置
 def configure_logging(app: FastAPI) -> None:
