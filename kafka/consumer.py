@@ -23,10 +23,18 @@ _shutdown_event = asyncio.Event()
 
 
 def _register_signals() -> None:
-    """注册 SIGTERM / SIGINT，收到信号后置位 shutdown_event 触发优雅退出。"""
-    loop = asyncio.get_event_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, _shutdown_event.set)
+    """
+    注册优雅退出信号。
+    - Linux/K8s: loop.add_signal_handler（支持 SIGTERM + SIGINT）
+    - Windows:   signal.signal 降级（仅 SIGINT / Ctrl+C，SIGTERM 在 K8s 中才生效）
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, _shutdown_event.set)
+    except NotImplementedError:
+        # Windows 不支持 add_signal_handler，降级为 signal.signal
+        signal.signal(signal.SIGINT, lambda _s, _f: _shutdown_event.set())
 
 
 async def _handle_one(
