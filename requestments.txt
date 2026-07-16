@@ -11,3 +11,5 @@ uvicorn
 jinja2
 psutil
 pyproj
+aiokafka
+aiohttp
