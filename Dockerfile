@@ -1,46 +1,33 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# NexusAi — Kafka Inference Worker  (multi-stage build)
+# NexusAi — Kafka Inference Worker
+# Base: python:3.12-slim
 #
-# Stage 1 (builder): python:3.12 full image — ships with gcc, libc6-dev,
-#   zlib1g-dev, and everything else needed to compile Cython extensions.
-#   lz4 is installed first so aiokafka's Cython extension detects it at
-#   compile time (the PyPI wheel is built without lz4 support).
-#
-# Stage 2 (runtime): python:3.12-slim — only the compiled venv is copied in;
-#   no build toolchain in the final image.
+# LZ4 note: the aiokafka PyPI wheel is compiled with HAS_LZ4=False (the
+# maintainer's build env has no lz4).  Even building from source only
+# recompiles the pre-generated .c files — the constant is already baked in.
+# Fix: remove the _crecords Cython extensions after install; aiokafka then
+# falls back to its pure-Python implementation which does `import lz4.frame`
+# at runtime, picking up the lz4 package we install here.
 # ─────────────────────────────────────────────────────────────────────────────
-
-# ── Stage 1 : builder ────────────────────────────────────────────────────────
-FROM python:3.12 AS builder
-
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir lz4 \
- && pip install --no-cache-dir --no-binary aiokafka -r requirements.txt
-
-# ── Stage 2 : runtime ────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    NEXUSAI_HOME=/app \
-    PATH="/opt/venv/bin:$PATH"
+    NEXUSAI_HOME=/app
 
 WORKDIR /app
 
-# Runtime-only system libs (no build tools in the final image)
+# Runtime system libraries for opencv-python-headless and numpy/OpenMP
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         libgomp1 \
-        zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
-# Compiled virtualenv from builder stage
-COPY --from=builder /opt/venv /opt/venv
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+ && find /usr/local/lib -path "*/aiokafka/record/_crecords/*.so" -delete
 
-# Application source (see .dockerignore for exclusions)
+# Copy application source (see .dockerignore for exclusions)
 COPY . .
 
 # Non-root user — aligns with K8s restrictedPodSecurityPolicy
