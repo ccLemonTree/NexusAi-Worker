@@ -213,6 +213,33 @@ async def run_model_tasks(
 # 向量入库（vector=true）
 # ---------------------------------------------------------------------------
 
+def _save_obj_image(obj_img: np.ndarray, device_id: str, capture_time: int) -> str:
+    """
+    将裁剪目标图保存到本地，返回完整文件路径。
+    目录结构：{OBJ_SAVE_PIC_LOCPATH}/{device_id}/{year}/{month}/{day}/{uuid}.jpeg
+    OBJ_SAVE_PIC_LOCPATH 未设置时返回空字符串（跳过保存）。
+    """
+    import uuid
+    from datetime import datetime
+    from PIL import Image as _PILImage
+
+    obj_root = os.getenv("OBJ_SAVE_PIC_LOCPATH", "")
+    if not obj_root:
+        return ""
+
+    dt = datetime.fromtimestamp(capture_time)
+    base_dir = os.path.join(
+        obj_root, device_id,
+        dt.strftime("%Y"), dt.strftime("%m"), dt.strftime("%d"),
+    )
+    os.makedirs(base_dir, exist_ok=True)
+
+    save_path = os.path.join(base_dir, f"{uuid.uuid4()}.jpeg")
+    # cv2 是 BGR，PIL 需要 RGB
+    pil_image = _PILImage.fromarray(obj_img[:, :, ::-1])
+    pil_image.save(save_path, format="JPEG")
+    return save_path
+
 def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
     """
     复用 vec2milvus 的核心逻辑：检测目标 → 生成向量 → 写入 Milvus。
@@ -232,7 +259,8 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
     channel_id   = msg_dict.get("channel_id", "")
     channel_name = msg_dict.get("channel_name", "")
     channel_num  = msg_dict.get("channel_number", "")
-    pic_url      = msg_dict.get("path", "")          # pic_path / pic_url 均为 path
+    pic_url      = msg_dict.get("path", "")          # EOS 对象 Key
+    save_local   = msg_dict.get("save_local", True)  # False = 不保存目标图到本地
 
     # capture_time：优先用消息里的 int 时间戳，否则用当前时间
     raw_ts = msg_dict.get("capture_time")
@@ -257,6 +285,14 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
             if (h * w) < pixelmax_label.get(info.classname, 20000):
                 continue
 
+            # 保存裁剪目标图到本地（save_local=False 时跳过，改用 EOS key）
+            if save_local:
+                large_image_url = _save_obj_image(obj_img, device_id, capture_time)
+                if not large_image_url:
+                    large_image_url = pic_url   # OBJ_SAVE_PIC_LOCPATH 未配置时降级
+            else:
+                large_image_url = pic_url
+
             # gme_vector 是 async 函数，在线程中用独立事件循环调用
             vector, emb_type = _asyncio.run(
                 gme_vector(
@@ -272,7 +308,7 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
                 partition_name=partition_name,
                 desc="",
                 image_url=pic_url,
-                large_image_url=pic_url,
+                large_image_url=large_image_url,
                 vector=vector,
                 device_id=device_id,
                 capture_time=capture_time,

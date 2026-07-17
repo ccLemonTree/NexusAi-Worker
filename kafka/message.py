@@ -21,6 +21,7 @@ class AnalyseInputMsg(BaseModel):
     eos: bool = False
     path: str = ""            # eos=false 时为本地路径，eos=true 时为 EOS 对象 Key
     vector: bool = False
+    save_local: bool = True    # False = 不保存裁剪目标图到本地，仅用 EOS key 作为 large_image_url
     questions: Optional[List[QuestionEntry]] = None
     labels: Optional[List[LabelEntry]] = None
     # vector=true 时传入，用于 milvus_insert
