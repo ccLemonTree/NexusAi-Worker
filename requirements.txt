@@ -15,7 +15,7 @@ Pillow==10.4.0
 
 # ── Triton inference client (gRPC) ─────────────────────────────────────────
 tritonclient[grpc]==2.66.0
-grpcio==1.67.1
+grpcio==1.73.0
 grpcio-status==1.73.0
 
 # ── Data validation / config ───────────────────────────────────────────────
