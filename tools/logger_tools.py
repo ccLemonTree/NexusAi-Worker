@@ -1,7 +1,6 @@
 import os
 import logging
 from logging.handlers import TimedRotatingFileHandler
-from fastapi import FastAPI
 # 创建日志目录
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -65,8 +64,9 @@ Kafka_Handler_logger  = setup_logger("kafka_handler",  "kafka_handler.log")
 Kafka_Producer_logger = setup_logger("kafka_producer", "kafka_producer.log")
 
 
-# FastAPI启动时配置
-def configure_logging(app: FastAPI) -> None:
+# FastAPI启动时配置（仅在 HTTP 服务中调用，Kafka worker 不使用）
+def configure_logging(app) -> None:
+    from fastapi import FastAPI  # 懒导入，避免在 Kafka worker 中强依赖 fastapi
     @app.on_event("startup")
     def startup_event():
         app_logger.info("FastAPI应用启动")
