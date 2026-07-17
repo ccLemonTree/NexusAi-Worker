@@ -1,0 +1,43 @@
+# Version control
+.git/
+.gitignore
+
+# CodeGraph index
+.codegraph/
+
+# Node / frontend artifacts
+node_modules/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+
+# Local environment — secrets must be injected via K8s ConfigMap / Secret
+.env
+.env.*
+
+# Logs produced at runtime (written to /app/logs inside the container)
+*.log
+logs/
+
+# Dev / test only
+test_e2e.py
+
+# Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker files themselves (no need to copy into the image)
+Dockerfile
+.dockerignore
