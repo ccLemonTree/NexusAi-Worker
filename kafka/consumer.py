@@ -101,7 +101,7 @@ async def run_consumer() -> None:
         bootstrap_servers=KAFKA_BOOTSTRAP,
         group_id=KAFKA_GROUP_ID,
         enable_auto_commit=False,
-        auto_offset_reset="latest",
+        auto_offset_reset="earliest",
         max_poll_records=MAX_CONCURRENT,
         session_timeout_ms=30_000,
         heartbeat_interval_ms=10_000,
