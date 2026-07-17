@@ -1,5 +1,6 @@
 # ── Kafka ──────────────────────────────────────────────────────────────────
 aiokafka==0.11.0
+lz4                  # LZ4 codec support for aiokafka (broker may compress with LZ4)
 
 # ── HTTP / async I/O ───────────────────────────────────────────────────────
 aiohttp==3.12.13
