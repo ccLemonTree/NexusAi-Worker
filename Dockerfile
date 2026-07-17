@@ -15,11 +15,11 @@ WORKDIR /app
 
 # System libraries:
 # - libglib2.0-0, libgomp1 : opencv-python-headless + numpy OpenMP
-# - gcc                    : required to compile aiokafka Cython extensions from source
+# - build-essential        : gcc + libc6-dev (stdlib.h), needed to compile aiokafka from source
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         libgomp1 \
-        gcc \
+        build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies.
