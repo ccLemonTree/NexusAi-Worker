@@ -15,6 +15,9 @@ from kafka.message import AnalyseInputMsg, AnalyseResultMsg, LabelResult
 from tools.init import chat_infer, cfg, client
 from tools.logger_tools import Kafka_Handler_logger as logger
 
+VLM_TIMEOUT   = float(os.getenv("VLM_TIMEOUT",   "60"))   # 大模型单次推理超时（秒）
+MODEL_TIMEOUT = float(os.getenv("MODEL_TIMEOUT",  "30"))   # 小模型单次推理超时（秒）
+
 
 def _now_iso() -> str:
     """返回 UTC 时间 ISO8601 字符串，精确到毫秒。"""
@@ -72,6 +75,7 @@ async def run_vlm_tasks(
     """
     并发调用 VLM，每条 question 独立推理。
     返回 (结果列表, sceneStartTime, sceneTime)
+    超时时间由 VLM_TIMEOUT 环境变量控制（默认 60s）。
     """
     _, buf = cv2.imencode(".jpeg", img)
     img_bytes: bytes = buf.tobytes()
@@ -83,10 +87,16 @@ async def run_vlm_tasks(
         loop.run_in_executor(executor, _call_vlm_sync, q["system"], q["question"], img_bytes)
         for q in questions
     ]
-    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        raw_results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=VLM_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"VLM 推理超时（>{VLM_TIMEOUT}s），共 {len(questions)} 条 question")
+        return ["推理超时"] * len(questions), scene_start, _now_iso()
 
     scene_end = _now_iso()
-
     results: List[str] = []
     for i, r in enumerate(raw_results):
         if isinstance(r, Exception):
@@ -94,7 +104,6 @@ async def run_vlm_tasks(
             results.append("推理异常")
         else:
             results.append(r)
-
     return results, scene_start, scene_end
 
 
@@ -144,6 +153,7 @@ async def run_model_tasks(
     """
     并发执行多条 label 的小模型推理，每条带自己的 alarmTypeId。
     返回 (结果列表, modelStartTime, modelTime)
+    超时时间由 MODEL_TIMEOUT 环境变量控制（默认 30s）。
     """
     loop = asyncio.get_event_loop()
     model_start = _now_iso()
@@ -152,10 +162,20 @@ async def run_model_tasks(
         loop.run_in_executor(executor, _call_model_sync, img, entry)
         for entry in labels
     ]
-    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        raw_results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=MODEL_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"小模型推理超时（>{MODEL_TIMEOUT}s），共 {len(labels)} 条 label")
+        return (
+            [{"alarmTypeId": e["alarmTypeId"], "bbox": []} for e in labels],
+            model_start,
+            _now_iso(),
+        )
 
     model_end = _now_iso()
-
     results: List[dict] = []
     for i, r in enumerate(raw_results):
         if isinstance(r, Exception):
@@ -163,7 +183,6 @@ async def run_model_tasks(
             results.append({"alarmTypeId": labels[i]["alarmTypeId"], "bbox": []})
         else:
             results.append(r)
-
     return results, model_start, model_end
 
 

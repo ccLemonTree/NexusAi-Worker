@@ -19,6 +19,22 @@ KAFKA_RESULT_TOPIC  = os.getenv("KAFKA_RESULT_TOPIC",   "model_analyse_result")
 KAFKA_GROUP_ID      = os.getenv("KAFKA_CONSUMER_GROUP", "nexusai-model-worker")
 MAX_CONCURRENT      = int(os.getenv("KAFKA_MAX_CONCURRENT", "16"))
 
+
+def _sasl_kwargs() -> dict:
+    """
+    若配置了 KAFKA_USERNAME 则返回 SASL/SCRAM 参数，否则返回空 dict（无认证模式）。
+    KAFKA_SASL_MECHANISM 默认 SCRAM-SHA-256，可改为 SCRAM-SHA-512。
+    """
+    username = os.getenv("KAFKA_USERNAME", "")
+    if not username:
+        return {}
+    return {
+        "security_protocol": "SASL_PLAINTEXT",
+        "sasl_mechanism":    os.getenv("KAFKA_SASL_MECHANISM", "SCRAM-SHA-256"),
+        "sasl_plain_username": username,
+        "sasl_plain_password": os.getenv("KAFKA_PASSWORD", ""),
+    }
+
 _shutdown_event = asyncio.Event()
 
 
@@ -77,17 +93,20 @@ async def run_consumer() -> None:
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
     pending: Set[asyncio.Task] = set()
 
+    sasl = _sasl_kwargs()
+    logger.info(f"Kafka SASL: {'enabled  mechanism=' + sasl['sasl_mechanism'] if sasl else 'disabled'}")
+
     consumer = AIOKafkaConsumer(
         KAFKA_INPUT_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP,
         group_id=KAFKA_GROUP_ID,
         enable_auto_commit=False,
-        auto_offset_reset="latest",       # 新 consumer 从最新消息开始消费
-        max_poll_records=MAX_CONCURRENT,  # 每次 poll 批量数与并发数对齐
+        auto_offset_reset="latest",
+        max_poll_records=MAX_CONCURRENT,
         session_timeout_ms=30_000,
         heartbeat_interval_ms=10_000,
-        # 处理耗时可能较长（VLM + 小模型），适当放大 poll 间隔超时
         max_poll_interval_ms=300_000,
+        **sasl,
     )
 
     await consumer.start()

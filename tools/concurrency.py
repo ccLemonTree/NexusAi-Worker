@@ -113,6 +113,7 @@ class TritonClientPool:
 
 _triton_pool: TritonClientPool | None = None
 _triton_pool_smoking: TritonClientPool | None = None
+_triton_pool_vlm: TritonClientPool | None = None
 
 
 def get_triton_pool() -> TritonClientPool:
@@ -132,3 +133,13 @@ def get_triton_pool_smoking() -> TritonClientPool:
         url = os.getenv("TRITON_SERVER_SMOKING") or os.getenv("TRITON_SERVER", "localhost:8001")
         _triton_pool_smoking = TritonClientPool(url=url)
     return _triton_pool_smoking
+
+
+def get_triton_pool_vlm() -> TritonClientPool:
+    """大模型（fastvlm 等）专用连接池，指向独立的 Triton VLM 部署。
+    若未配置 TRITON_SERVER_VLM，退回到 TRITON_SERVER（向后兼容）。"""
+    global _triton_pool_vlm
+    if _triton_pool_vlm is None:
+        url = os.getenv("TRITON_SERVER_VLM") or os.getenv("TRITON_SERVER", "localhost:8001")
+        _triton_pool_vlm = TritonClientPool(url=url)
+    return _triton_pool_vlm
