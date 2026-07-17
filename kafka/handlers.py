@@ -29,25 +29,47 @@ def _now_iso() -> str:
 # 图片加载
 # ---------------------------------------------------------------------------
 
+def _download_eos_sync(key: str) -> bytes:
+    """
+    通过 boto3 S3 客户端从 EOS 下载对象，返回原始字节。
+    环境变量：
+        EOS_ACCESS_KEY  — AccessKey
+        EOS_SECRET_KEY  — SecretKey
+        EOS_ENDPOINT    — Endpoint URL，如 https://eos-wuxi-1.cmecloud.cn
+        EOS_BUCKET      — Bucket 名称
+    """
+    import boto3
+    from boto3.session import Session as _S3Session
+
+    session = _S3Session(
+        os.getenv("EOS_ACCESS_KEY"),
+        os.getenv("EOS_SECRET_KEY"),
+    )
+    s3 = session.client("s3", endpoint_url=os.getenv("EOS_ENDPOINT"))
+    resp = s3.get_object(Bucket=os.getenv("EOS_BUCKET"), Key=key)
+    return resp["Body"].read()
+
+
 async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
     """
-    eos=True  → path 是预签名 HTTP URL，直接 GET 下载
+    eos=True  → path 是 EOS 对象 Key，通过 boto3 S3 客户端下载
     eos=False → path 是容器内本地路径，cv2.imread 读取
     """
     if eos:
         try:
-            timeout = aiohttp.ClientTimeout(total=int(os.getenv("EOS_TIMEOUT", "15")))
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(path) as resp:
-                    resp.raise_for_status()
-                    data = await resp.read()
+            timeout = int(os.getenv("EOS_TIMEOUT", "15"))
+            loop = asyncio.get_event_loop()
+            data: bytes = await asyncio.wait_for(
+                loop.run_in_executor(executor, _download_eos_sync, path),
+                timeout=timeout,
+            )
             arr = np.frombuffer(data, np.uint8)
             img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if img is None:
                 raise ValueError("cv2.imdecode 返回 None，可能不是合法图片")
             return img
         except Exception as e:
-            logger.error(f"EOS 图片下载失败: {e}  url={path[:120]}")
+            logger.error(f"EOS 图片下载失败: {e}  key={path[:120]}")
             return None
     else:
         loop = asyncio.get_event_loop()
@@ -191,11 +213,12 @@ async def run_model_tasks(
 # 向量入库（vector=true）
 # ---------------------------------------------------------------------------
 
-def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> None:
+def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
     """
     复用 vec2milvus 的核心逻辑：检测目标 → 生成向量 → 写入 Milvus。
     此函数在线程池中同步运行（gme_vector 内部有 asyncio.run，需隔离）。
     msg_dict 是 AnalyseInputMsg.dict()，避免跨线程传递 Pydantic 对象。
+    返回 True 表示至少成功入库一条，False 表示无目标或入库异常。
     """
     import asyncio as _asyncio
     from api.infer.running import analyseRun
@@ -226,6 +249,7 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> None:
         boundings = analyseRun(setsLabel, [img])
 
         pixelmax_label = {"face": 1000, "PlateSearch-car": 1000}
+        inserted = False
 
         for info in boundings:
             _, obj_img = cut_img(img, info)
@@ -260,19 +284,26 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> None:
                 target_category=info.classname,
                 search_type="obj",
             )
+            inserted = True
+
+        return inserted
+
     except Exception as e:
         logger.error(f"向量入库失败 device_id={device_id}: {e}", exc_info=True)
+        return False
 
 
-async def run_vector_task(img: np.ndarray, msg: AnalyseInputMsg) -> None:
+async def run_vector_task(img: np.ndarray, msg: AnalyseInputMsg) -> bool:
     loop = asyncio.get_event_loop()
     try:
-        await asyncio.wait_for(
+        result: bool = await asyncio.wait_for(
             loop.run_in_executor(executor, _call_vector_sync, img, msg.dict()),
             timeout=VECTOR_TIMEOUT,
         )
+        return result
     except asyncio.TimeoutError:
         logger.error(f"向量入库超时（>{VECTOR_TIMEOUT}s）device_id={msg.deviceId}")
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +335,7 @@ async def process_message(raw: bytes) -> Optional[dict]:
     scene_start = scene_end = ""
     labels_result: List[dict] = []
     model_start = model_end = ""
+    vector_ok: bool = False
 
     coros = []
     tags  = []
@@ -330,13 +362,14 @@ async def process_message(raw: bytes) -> Optional[dict]:
             questions_result, scene_start, scene_end = result
         elif tag == "model":
             labels_result, model_start, model_end = result
-        # vector 无返回值
+        elif tag == "vector":
+            vector_ok = bool(result)  # True=至少入库一条，False=无目标或异常
 
     # 4. 组装结果
     output = AnalyseResultMsg(
         id=msg.id,
         questions=questions_result,
-        vector=msg.vector,
+        vector=vector_ok,
         sceneStartTime=scene_start,
         sceneTime=scene_end,
         modelStartTime=model_start,

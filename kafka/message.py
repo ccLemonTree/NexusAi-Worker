@@ -19,7 +19,7 @@ class AnalyseInputMsg(BaseModel):
     deviceId: str = ""
     presetId: int = 0
     eos: bool = False
-    path: str = ""            # eos=false 时为本地路径，eos=true 时为预签名 URL
+    path: str = ""            # eos=false 时为本地路径，eos=true 时为 EOS 对象 Key
     vector: bool = False
     questions: Optional[List[QuestionEntry]] = None
     labels: Optional[List[LabelEntry]] = None
