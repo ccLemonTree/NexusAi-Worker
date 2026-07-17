@@ -3,11 +3,7 @@
 # @Author  : 陈澔麟
 # @File    : mindie_infer.py
 
-import os.path
-import shutil
-import uuid
 import requests
-from openai import OpenAI
 from api.infer.utils import file2base64img
 import json
 

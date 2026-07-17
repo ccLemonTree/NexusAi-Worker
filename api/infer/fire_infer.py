@@ -4,15 +4,8 @@
 # @File    : mindie_infer.py
 
 import os.path
-import shutil
-import uuid
 
-import cv2
-import requests
 from api.infer.Triton_model.triton_client import triton_inference
-from openai import OpenAI
-from api.infer.utils import file2base64img
-import json
 
 
 class fire_infer(object):
