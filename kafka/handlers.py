@@ -15,8 +15,9 @@ from kafka.message import AnalyseInputMsg, AnalyseResultMsg, LabelResult
 from tools.init import chat_infer, cfg, client
 from tools.logger_tools import Kafka_Handler_logger as logger
 
-VLM_TIMEOUT   = float(os.getenv("VLM_TIMEOUT",   "60"))   # 大模型单次推理超时（秒）
-MODEL_TIMEOUT = float(os.getenv("MODEL_TIMEOUT",  "30"))   # 小模型单次推理超时（秒）
+VLM_TIMEOUT    = float(os.getenv("VLM_TIMEOUT",    "60"))   # 大模型单次推理超时（秒）
+MODEL_TIMEOUT  = float(os.getenv("MODEL_TIMEOUT",   "30"))   # 小模型单次推理超时（秒）
+VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "30"))   # 向量入库超时（秒）
 
 
 def _now_iso() -> str:
@@ -265,7 +266,13 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> None:
 
 async def run_vector_task(img: np.ndarray, msg: AnalyseInputMsg) -> None:
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(executor, _call_vector_sync, img, msg.dict())
+    try:
+        await asyncio.wait_for(
+            loop.run_in_executor(executor, _call_vector_sync, img, msg.dict()),
+            timeout=VECTOR_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"向量入库超时（>{VECTOR_TIMEOUT}s）device_id={msg.deviceId}")
 
 
 # ---------------------------------------------------------------------------
