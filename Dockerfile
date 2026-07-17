@@ -13,15 +13,22 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# System libraries required by opencv-python-headless and numpy/OpenMP
+# System libraries:
+# - libglib2.0-0, libgomp1 : opencv-python-headless + numpy OpenMP
+# - gcc                    : required to compile aiokafka Cython extensions from source
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         libgomp1 \
+        gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies in a separate layer for cache efficiency
+# Install Python dependencies.
+# lz4 MUST be installed before aiokafka: the aiokafka Cython extension checks
+# for lz4 availability at compile time.  The PyPI wheel is built without lz4,
+# so we force a source build (--no-binary aiokafka) after lz4 is present.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir lz4 \
+ && pip install --no-cache-dir --no-binary aiokafka -r requirements.txt
 
 # Copy application source (see .dockerignore for exclusions)
 COPY . .
