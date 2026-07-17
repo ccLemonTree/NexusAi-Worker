@@ -14,9 +14,9 @@ numpy==2.2.4
 Pillow==10.4.0
 
 # ── Triton inference client (gRPC) ─────────────────────────────────────────
+# grpcio / grpcio-status are transitive deps of tritonclient and pymilvus;
+# let pip resolve a mutually compatible version rather than pinning them here.
 tritonclient[grpc]==2.66.0
-grpcio==1.73.0
-grpcio-status==1.73.0
 
 # ── Data validation / config ───────────────────────────────────────────────
 pydantic==2.11.7
