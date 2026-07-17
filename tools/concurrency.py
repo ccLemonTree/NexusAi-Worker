@@ -112,7 +112,6 @@ class TritonClientPool:
 
 
 _triton_pool: TritonClientPool | None = None
-_triton_pool_smoking: TritonClientPool | None = None
 _triton_pool_vlm: TritonClientPool | None = None
 
 
@@ -123,16 +122,6 @@ def get_triton_pool() -> TritonClientPool:
         url = os.getenv("TRITON_SERVER", "localhost:8001")
         _triton_pool = TritonClientPool(url=url)
     return _triton_pool
-
-
-def get_triton_pool_smoking() -> TritonClientPool:
-    """yolov11det 专用连接池，指向独立的 triton-smoking 部署。
-    若未配置 TRITON_SERVER_SMOKING，退回到 TRITON_SERVER（向后兼容）。"""
-    global _triton_pool_smoking
-    if _triton_pool_smoking is None:
-        url = os.getenv("TRITON_SERVER_SMOKING") or os.getenv("TRITON_SERVER", "localhost:8001")
-        _triton_pool_smoking = TritonClientPool(url=url)
-    return _triton_pool_smoking
 
 
 def get_triton_pool_vlm() -> TritonClientPool:

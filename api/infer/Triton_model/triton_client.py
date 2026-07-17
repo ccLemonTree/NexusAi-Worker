@@ -14,7 +14,7 @@ from api.infer.Triton_model.sam3.sam3_detector import sam3
 from api.infer.Triton_model.yolov11det.yolov11_detector import yolov11det
 from api.infer.Triton_model.yolov11cls.yolov11cls_detector import yolov11cls
 from api.infer.Triton_model.fastvlm.fastvlm_detector import fastvlm_detector
-from tools.concurrency import get_triton_pool, get_triton_pool_smoking, get_triton_pool_vlm
+from tools.concurrency import get_triton_pool, get_triton_pool_vlm
 from api.infer.Triton_model.yolov26det.yolov26_detector import yolov26det
 def none(a,b,c,d,e, box_info=""):
     return [],[]
@@ -27,7 +27,6 @@ class triton_inference:
         self.service_scheduling = {}
         self.urls = urls
         self._pool = get_triton_pool()
-        self._pool_smoking = get_triton_pool_smoking()  # yolov11det 专用池
         self._pool_vlm = get_triton_pool_vlm()          # 大模型(fastvlm等) 专用池
         self.model_class = {
             "yolov5": yolov5,
@@ -112,8 +111,7 @@ class triton_inference:
 
         try:
             name = service_name.split("_")[0]
-            pool = self._pool_smoking if name == "yolov11det" else self._pool
-            with pool.borrow() as client:
+            with self._pool.borrow() as client:
                 if client is None:
                     return [], {}   # 连接池耗尽，返回空结果
                 result_to_return, time_client_json = self.model_class.get(name, "none")(
