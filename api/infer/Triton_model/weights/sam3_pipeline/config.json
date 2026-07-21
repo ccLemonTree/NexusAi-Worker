@@ -5,7 +5,7 @@
   "input": [
     {
       "name": "image",
-      "data_type": "TYPE_UINT8",
+      "data_type": "TYPE_FP32",
       "dims": [
         1,
 	3,
