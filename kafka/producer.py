@@ -51,5 +51,7 @@ async def stop_producer() -> None:
 async def send_result(result: dict) -> None:
     topic = os.getenv("KAFKA_RESULT_TOPIC", "model_analyse_result")
     producer = await get_producer()
-    await producer.send_and_wait(topic, result)
-    logger.debug(f"Result sent  id={result.get('id')}  topic={topic}")
+    msg_id = result.get("id")
+    key = str(msg_id).encode("utf-8") if msg_id is not None else None
+    await producer.send_and_wait(topic, result, key=key)
+    logger.debug(f"Result sent  id={msg_id}  topic={topic}")

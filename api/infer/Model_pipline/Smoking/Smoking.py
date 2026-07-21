@@ -55,6 +55,8 @@ class Model(ModelClass):
 
             # 并发处理所有检测框（原串行改为并发）
             boundingboxs = []
+            if not self.logicResult:
+                return boundingboxs, []
             with ThreadPoolExecutor(max_workers=min(len(self.logicResult), 10)) as pool:
                 futures = {pool.submit(process_one, info): info
                            for info in self.logicResult}

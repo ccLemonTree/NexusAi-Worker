@@ -68,6 +68,15 @@ def sam3(triton_client, service_name, init_data, img, label_rules, box_info, con
     if "STRING" in txt_type:
         txt_type = "BYTES"
 
+    # 将 img_data 转换为模型期望的数据类型
+    _DTYPE_MAP = {"FP32": np.float32, "FP16": np.float16, "UINT8": np.uint8}
+    _target_dtype = _DTYPE_MAP.get(img_type, np.uint8)
+    if _target_dtype in (np.float32, np.float16):
+        # 归一化到 [-1, 1]
+        img_data = (img_data.astype(np.float32) / 127.5 - 1.0).astype(_target_dtype)
+    else:
+        img_data = img_data.astype(_target_dtype)
+
     outputs = [grpcclient.InferRequestedOutput(obj["name"]) for obj in OUTPUT_CFG]
 
     pretreatment_end = time.time()  # [时间点2] 预处理结束
