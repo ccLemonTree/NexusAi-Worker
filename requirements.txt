@@ -29,5 +29,8 @@ PyYAML==6.0.1
 # ── Vector DB ──────────────────────────────────────────────────────────────
 pymilvus==3.0.0
 
+# ── OpenAI-compatible client (used by vector.py for vLLM embedding API) ────
+openai==1.59.3
+
 # ── Object storage (EOS / S3-compatible) ───────────────────────────────────
 boto3==1.38.33
