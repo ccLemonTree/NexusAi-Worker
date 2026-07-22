@@ -13,14 +13,18 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    NEXUSAI_HOME=/app
+    NEXUSAI_HOME=/app \
+    TZ=Asia/Shanghai
 
 WORKDIR /app
 
-# Runtime system libraries for opencv-python-headless and numpy/OpenMP
+# Runtime system libraries for opencv-python-headless and numpy/OpenMP + timezone setup
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         libgomp1 \
+        tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
