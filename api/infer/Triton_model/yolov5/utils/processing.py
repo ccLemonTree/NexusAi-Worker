@@ -78,12 +78,9 @@ def non_max_suppression(prediction, origin_h, origin_w, input_w, input_h, conf_t
     # Get the boxes that score > CONF_THRESH
     boxes1 = prediction[prediction[:, 4] >= conf_thres]
     if len(boxes1):
-        zzz = []
-        for i in range(len(boxes1)):
-            boxe = list(boxes1[i, 0:5])
-            boxe.append(int(np.argmax(boxes1[i, 5:])))
-            zzz.append(np.array(boxe))
-        boxes = np.array(zzz)
+        # 向量化操作：一次性计算所有框的类别 ID（模仿 yolov11，避免循环调用 argmax）
+        class_ids = np.argmax(boxes1[:, 5:], axis=1, keepdims=True)
+        boxes = np.concatenate([boxes1[:, :5], class_ids], axis=1)
         # Trandform bbox from [center_x, center_y, w, h] to [x1, y1, x2, y2]
         boxes[:, :4] = xywh2xyxy(boxes[:, :4], origin_h, origin_w, input_w, input_h)
         # clip the coordinates
@@ -91,21 +88,24 @@ def non_max_suppression(prediction, origin_h, origin_w, input_w, input_h, conf_t
         boxes[:, 2] = np.clip(boxes[:, 2], 0, origin_w - 1)
         boxes[:, 1] = np.clip(boxes[:, 1], 0, origin_h - 1)
         boxes[:, 3] = np.clip(boxes[:, 3], 0, origin_h - 1)
-        # Object confidence
-        confs = boxes[:, 4]
-        # Sort by the confs
-        boxes = boxes[np.argsort(-confs)]
 
-        # Perform non-maximum suppression
+        # 使用 OpenCV 的 NMSBoxes（C++ 实现，不受 GIL 限制）
+        # 转换为 OpenCV 格式：[x, y, w, h]（向量化操作，避免循环）
+        x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+        bboxes = np.column_stack([x1, y1, x2 - x1, y2 - y1]).tolist()
+        scores = boxes[:, 4].tolist()
+        class_ids_list = boxes[:, 5].astype(int).tolist()
+
+        # OpenCV NMSBoxes
+        indices = cv2.dnn.NMSBoxes(bboxes, scores, conf_thres, nms_thres)
+
+        # 重建结果
         keep_boxes = []
-        while boxes.shape[0]:
-            large_overlap = bbox_iou(np.expand_dims(boxes[0, :4], 0), boxes[:, :4]) > nms_thres
-            # print(large_overlap)
-            label_match = boxes[0, -1] == boxes[:, -1]
-            # Indices of boxes with lower confidence scores, large IOUs and matching labels
-            invalid = large_overlap & label_match
-            keep_boxes += [boxes[0]]
-            boxes = boxes[~invalid]
+        if len(indices) > 0:
+            indices = indices.flatten()
+            for idx in indices:
+                keep_boxes.append(boxes[idx])
+
         boxes = np.stack(keep_boxes, 0) if len(keep_boxes) else np.array([])
     else:
         boxes = []
