@@ -20,7 +20,7 @@ from tools.logger_tools import Kafka_Handler_logger as logger
 io_executor = get_io_executor()
 
 VLM_TIMEOUT    = float(os.getenv("VLM_TIMEOUT",    "3"))   # 大模型单次推理超时（秒）
-MODEL_TIMEOUT  = float(os.getenv("MODEL_TIMEOUT",   "5"))   # 小模型单次推理超时（秒）
+MODEL_TIMEOUT  = float(os.getenv("MODEL_TIMEOUT",   "15"))   # 小模型单次推理超时（秒）
 VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "3"))   # 向量入库超时（秒）
 
 
