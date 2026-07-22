@@ -47,6 +47,11 @@ def get_io_executor() -> ThreadPoolExecutor:
     return get_executor("IO_MAX_WORKERS", default_scale=2, hard_cap=32, prefix="io")
 
 
+def get_triton_executor() -> ThreadPoolExecutor:
+    """专用于 Triton 推理任务，避免和外层调度线程池嵌套导致死锁。"""
+    return get_executor("TRITON_MAX_WORKERS", default_scale=10, hard_cap=128, prefix="triton")
+
+
 class TritonClientPool:
     """
     gRPC 连接池。每个 worker 进程独立持有，避免多线程共用单连接的竞争。

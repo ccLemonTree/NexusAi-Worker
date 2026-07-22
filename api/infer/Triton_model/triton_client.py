@@ -111,11 +111,22 @@ class triton_inference:
 
         try:
             name = service_name.split("_")[0]
-            with self._pool.borrow() as client:
-                if client is None:
-                    return [], {}   # 连接池耗尽，返回空结果
+
+            # 创建独立的客户端而不是使用连接池（避免锁竞争）
+            client = grpcclient.InferenceServerClient(
+                url=self._pool._url if hasattr(self._pool, '_url') else os.getenv("TRITON_SERVER", "localhost:8001"),
+                channel_args=[
+                    ("grpc.max_receive_message_length", 64 * 1024 * 1024),
+                    ("grpc.max_send_message_length", 64 * 1024 * 1024),
+                ]
+            )
+
+            try:
                 result_to_return, time_client_json = self.model_class.get(name, "none")(
                     client, service_name, self.init_data, img, label_to_detect, box_info=box_info)
+            finally:
+                client.close()
+
             return result_to_return
         except Exception as e:
             print(f"Service not enabled{service_name}")

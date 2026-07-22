@@ -1,20 +1,20 @@
-
 import copy
 
 from tools.init import tritonServer
 from api.infer.Utils.result_utils import *
-from tools.concurrency import get_inference_executor, get_logic_executor
+from tools.concurrency import get_inference_executor, get_logic_executor, get_triton_executor
 from tools.logger_tools import CangQiong_Smart_Model_logger as logger
 
 executor       = get_inference_executor()   # analyseRun 用
 logic_executor = get_logic_executor()       # _run_analyse_sync 用
+triton_executor = get_triton_executor()     # Triton 推理专用，避免嵌套死锁
 
 from tools.init import cfg
 from api.infer.Utils.analyse_utils import LabelToModel
 from api.infer.Utils.boundingbox import BoundingBox
 
 
-def analyseRun(setsLabel, imgs, camerInfo=CameraInfo(),label_rules={},roi=None, label_to_detect=[], box_info=BoundingBox(0, 0, 0, 0, 0, 0, 1, 1, "cls")):
+def analyseRun(setsLabel, imgs, camerInfo=CameraInfo(), label_rules={}, roi=None, label_to_detect=[], box_info=BoundingBox(0, 0, 0, 0, 0, 0, 1, 1, "cls"), triton_executor=None):
     """
     param:
     setsLabel : 逻辑（逻辑标签不嵌套） + 非逻辑  [car, illegal-car,...]
@@ -22,8 +22,12 @@ def analyseRun(setsLabel, imgs, camerInfo=CameraInfo(),label_rules={},roi=None, 
     camerInfo : 设备信息
     label_to_detect ： 传入的分析标签
     box_info: 传入的boundingbox
+    triton_executor: Triton 推理专用线程池，避免嵌套死锁
     Return : [BoundingBox , ...]
     """
+    if triton_executor is None:
+        triton_executor = executor  # 兼容旧代码
+
     img = imgs[0]
     # 列表展平 去重
     setsLabel = set(setsLabel)  # ['car', 'illegal-car']
@@ -47,7 +51,7 @@ def analyseRun(setsLabel, imgs, camerInfo=CameraInfo(),label_rules={},roi=None, 
         modelConf[key] = label_rules.get(key,value)
 
 
-    firstResult, unlogicAnalyseTime = Unlogic_run(img, analyseModels, tritonServer, executor,label_rules= modelConf,box_info=box_info)
+    firstResult, unlogicAnalyseTime = Unlogic_run(img, analyseModels, tritonServer, triton_executor, label_rules=modelConf, box_info=box_info)
     boxes = firstResult
 
     # 存储 逻辑任务的线程
@@ -71,7 +75,7 @@ def analyseRun(setsLabel, imgs, camerInfo=CameraInfo(),label_rules={},roi=None, 
             logicAnalysisDict[lab] = logicLabList
 
     for lab, logicList in logicAnalysisDict.items():
-        fuctureList.append(executor.submit(
+        fuctureList.append(triton_executor.submit(
             logic_run, imgs, logicList, camerInfo, lab, tritonServer, label_rules))  # 提交任务
 
     # 获取逻辑标签结果
@@ -104,7 +108,7 @@ def _run_analyse_sync(camerInfo, setsLabel, label_rules):
             unlogicAnalysis.add(lab)
 
     firstAnalysis = unlogicAnalysis | logicAnalysis
-    firstResult = analyseRun(firstAnalysis, camerInfo.imgsList, camerInfo, label_rules)
+    firstResult = analyseRun(firstAnalysis, camerInfo.imgsList, camerInfo, label_rules, triton_executor=triton_executor)
 
     fuctureList = []
     logicAnalysisDict = {}
