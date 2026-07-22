@@ -15,9 +15,9 @@ from kafka.message import AnalyseInputMsg, AnalyseResultMsg, LabelResult
 from tools.init import chat_infer, cfg, client
 from tools.logger_tools import Kafka_Handler_logger as logger
 
-VLM_TIMEOUT    = float(os.getenv("VLM_TIMEOUT",    "60"))   # 大模型单次推理超时（秒）
-MODEL_TIMEOUT  = float(os.getenv("MODEL_TIMEOUT",   "30"))   # 小模型单次推理超时（秒）
-VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "30"))   # 向量入库超时（秒）
+VLM_TIMEOUT    = float(os.getenv("VLM_TIMEOUT",    "3"))   # 大模型单次推理超时（秒）
+MODEL_TIMEOUT  = float(os.getenv("MODEL_TIMEOUT",   "2"))   # 小模型单次推理超时（秒）
+VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "2"))   # 向量入库超时（秒）
 
 
 def _now_iso() -> str:
@@ -56,7 +56,7 @@ async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
     eos=False → path 是容器内本地路径，cv2.imread 读取
     """
     if eos:
-        timeout = int(os.getenv("EOS_TIMEOUT", "15"))
+        timeout = int(os.getenv("EOS_TIMEOUT", "2"))
         try:
             loop = asyncio.get_event_loop()
             data: bytes = await asyncio.wait_for(
@@ -226,7 +226,7 @@ async def run_model_tasks(
 
 def _save_obj_image(obj_img: np.ndarray, device_id: str, capture_time: int) -> str:
     """
-    将裁剪目标图保存到本地，返回完整文件路径。
+    将整张大图保存到本地，返回完整文件路径。
     目录结构：{OBJ_SAVE_PIC_LOCPATH}/{device_id}/{year}/{month}/{day}/{uuid}.jpeg
     OBJ_SAVE_PIC_LOCPATH 未设置时返回空字符串（跳过保存）。
     """
@@ -290,20 +290,20 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
         pixelmax_label = {"face": 1000, "PlateSearch-car": 1000}
         inserted = False
 
+        if len(boundings) > 0:
+            # 保存整张大图到本地（save_local=False 时跳过，改用 EOS key）
+            if save_local:
+                large_image_url = _save_obj_image(img, device_id, capture_time)
+                if not large_image_url:
+                    large_image_url = pic_url  # OBJ_SAVE_PIC_LOCPATH 未配置时降级
+            else:
+                large_image_url = pic_url
+
         for info in boundings:
             _, obj_img = cut_img(img, info)
             h, w, _ = obj_img.shape
             if (h * w) < pixelmax_label.get(info.classname, 20000):
                 continue
-
-            # 保存裁剪目标图到本地（save_local=False 时跳过，改用 EOS key）
-            if save_local:
-                large_image_url = _save_obj_image(obj_img, device_id, capture_time)
-                if not large_image_url:
-                    large_image_url = pic_url   # OBJ_SAVE_PIC_LOCPATH 未配置时降级
-            else:
-                large_image_url = pic_url
-
             # gme_vector 是 async 函数，在线程中用独立事件循环调用
             vector, emb_type = _asyncio.run(
                 gme_vector(
