@@ -30,11 +30,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
 # Copy application source (see .dockerignore for exclusions)
 COPY . .
 
-# Non-root user — aligns with K8s restrictedPodSecurityPolicy
-RUN useradd -m -u 1000 nexusai \
-    && mkdir -p /app/logs \
-    && chown -R nexusai:nexusai /app
-USER nexusai
+# Create logs directory (run as root, no non-root user needed for now)
+RUN mkdir -p /app/logs
 
 # ─── Runtime environment variables (override via K8s ConfigMap / Secret) ────
 # KAFKA_BOOTSTRAP          Kafka broker address          (default: 192.168.1.115:9092)
