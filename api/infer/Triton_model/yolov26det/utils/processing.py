@@ -101,11 +101,8 @@ def postprocess(output, origin_w, origin_h, input_shape, conf_th=0.5, nms_thresh
     for b in pred:
         # YOLO26 默认输出格式通常为: [x1, y1, x2, y2, score, cls_id]
         x1, y1, x2, y2, score, cls_id = b
-        
-        # 4. 置信度过滤
-        if score < conf_th:
-            continue
-            
+
+        # 注意：置信度过滤已移至 detector 层（支持每个标签独立阈值）
         cls_id = int(cls_id)
 
         # 5. 减去灰边，并除以缩放系数，还原到原图物理尺寸
