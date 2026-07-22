@@ -230,6 +230,17 @@ async def run_model_tasks(
             results.append({"alarmTypeId": labels[i]["alarmTypeId"], "bbox": []})
         else:
             results.append(r)
+
+    # 计算总耗时并记录
+    from datetime import datetime
+    try:
+        start_dt = datetime.strptime(model_start, "%Y-%m-%d %H:%M:%S")
+        end_dt = datetime.strptime(model_end, "%Y-%m-%d %H:%M:%S")
+        elapsed = (end_dt - start_dt).total_seconds()
+        logger.info(f"小模型推理完成 耗时={elapsed:.3f}s  labels={len(labels)}条")
+    except Exception:
+        pass  # 时间解析失败不影响主流程
+
     return results, model_start, model_end
 
 
