@@ -80,6 +80,9 @@ class TritonClientPool:
                     ("grpc.lb_policy_name", "round_robin"),
                     # headless service 返回多个 IP，需要解析所有地址
                     ("grpc.service_config", '{"loadBalancingPolicy": "round_robin"}'),
+                    # 增大 gRPC 消息大小限制（默认 4MB → 64MB），避免大图推理时 RESOURCE_EXHAUSTED
+                    ("grpc.max_receive_message_length", 64 * 1024 * 1024),
+                    ("grpc.max_send_message_length", 64 * 1024 * 1024),
                 ]
             )
             self._pool.put(client)

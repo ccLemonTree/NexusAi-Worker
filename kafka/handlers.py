@@ -242,6 +242,7 @@ def _save_obj_image(obj_img: np.ndarray, device_id: str, capture_time: int) -> s
     将整张大图保存到本地，返回完整文件路径。
     目录结构：{OBJ_SAVE_PIC_LOCPATH}/{device_id}/{year}/{month}/{day}/{uuid}.jpeg
     OBJ_SAVE_PIC_LOCPATH 未设置时返回空字符串（跳过保存）。
+    权限错误时返回空字符串并记录警告（降级到 EOS key）。
     """
     import uuid
     from datetime import datetime
@@ -256,13 +257,27 @@ def _save_obj_image(obj_img: np.ndarray, device_id: str, capture_time: int) -> s
         obj_root, device_id,
         dt.strftime("%Y"), dt.strftime("%m"), dt.strftime("%d"),
     )
-    os.makedirs(base_dir, exist_ok=True)
+
+    try:
+        os.makedirs(base_dir, exist_ok=True)
+    except PermissionError as e:
+        logger.warning(
+            f"本地保存大图失败(权限不足)，降级使用 EOS key: {base_dir} — {e}"
+        )
+        return ""
+    except Exception as e:
+        logger.warning(f"本地保存大图失败: {base_dir} — {e}")
+        return ""
 
     save_path = os.path.join(base_dir, f"{uuid.uuid4()}.jpeg")
-    # cv2 是 BGR，PIL 需要 RGB
-    pil_image = _PILImage.fromarray(obj_img[:, :, ::-1])
-    pil_image.save(save_path, format="JPEG")
-    return save_path
+    try:
+        # cv2 是 BGR，PIL 需要 RGB
+        pil_image = _PILImage.fromarray(obj_img[:, :, ::-1])
+        pil_image.save(save_path, format="JPEG")
+        return save_path
+    except Exception as e:
+        logger.warning(f"保存图片失败: {save_path} — {e}")
+        return ""
 
 def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
     """
