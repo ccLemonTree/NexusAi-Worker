@@ -42,6 +42,11 @@ def get_logic_executor() -> ThreadPoolExecutor:
     return get_executor("LOGIC_MAX_WORKERS", default_scale=3, prefix="logic")
 
 
+def get_io_executor() -> ThreadPoolExecutor:
+    """专用于 I/O 密集型任务（EOS下载、本地文件读取），避免和推理线程竞争。"""
+    return get_executor("IO_MAX_WORKERS", default_scale=2, hard_cap=32, prefix="io")
+
+
 class TritonClientPool:
     """
     gRPC 连接池。每个 worker 进程独立持有，避免多线程共用单连接的竞争。

@@ -11,9 +11,13 @@ import numpy as np
 
 from api.infer.Utils.class_info import CameraInfo
 from api.infer.running import _run_analyse_sync, logic_executor as executor
+from tools.concurrency import get_io_executor
 from kafka.message import AnalyseInputMsg, AnalyseResultMsg, LabelResult
 from tools.init import chat_infer, cfg, client
 from tools.logger_tools import Kafka_Handler_logger as logger
+
+# I/O 密集型任务专用线程池（EOS 下载、本地文件读取），与推理线程池隔离
+io_executor = get_io_executor()
 
 VLM_TIMEOUT    = float(os.getenv("VLM_TIMEOUT",    "3"))   # 大模型单次推理超时（秒）
 MODEL_TIMEOUT  = float(os.getenv("MODEL_TIMEOUT",   "2"))   # 小模型单次推理超时（秒）
@@ -55,18 +59,22 @@ async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
     eos=True  → path 是 EOS 对象 Key，通过 boto3 S3 客户端下载
     eos=False → path 是容器内本地路径，cv2.imread 读取
     """
+    import time as _time
     if eos:
-        timeout = int(os.getenv("EOS_TIMEOUT", "2"))
+        timeout = int(os.getenv("EOS_TIMEOUT", "15"))
+        t0 = _time.monotonic()
         try:
             loop = asyncio.get_event_loop()
             data: bytes = await asyncio.wait_for(
-                loop.run_in_executor(executor, _download_eos_sync, path),
+                loop.run_in_executor(io_executor, _download_eos_sync, path),
                 timeout=timeout,
             )
+            elapsed = _time.monotonic() - t0
             arr = np.frombuffer(data, np.uint8)
             img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if img is None:
                 raise ValueError("cv2.imdecode 返回 None，可能不是合法图片")
+            logger.info(f"EOS 图片下载成功 耗时={elapsed:.3f}s  size={len(data)}B  key={path[:120]}")
             return img
         except asyncio.TimeoutError:
             logger.error(
@@ -75,18 +83,23 @@ async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
             )
             return None
         except Exception as e:
+            elapsed = _time.monotonic() - t0
             logger.error(
-                f"EOS 图片下载失败: [{type(e).__name__}] {e}  "
+                f"EOS 图片下载失败 耗时={elapsed:.3f}s: [{type(e).__name__}] {e}  "
                 f"endpoint={os.getenv('EOS_ENDPOINT')}  bucket={os.getenv('EOS_BUCKET')}  "
                 f"key={path[:120]}",
                 exc_info=True,
             )
             return None
     else:
+        t0 = _time.monotonic()
         loop = asyncio.get_event_loop()
-        img = await loop.run_in_executor(executor, cv2.imread, path)
+        img = await loop.run_in_executor(io_executor, cv2.imread, path)
+        elapsed = _time.monotonic() - t0
         if img is None:
-            logger.error(f"本地图片读取失败: {path}")
+            logger.error(f"本地图片读取失败 耗时={elapsed:.3f}s: {path}")
+        else:
+            logger.info(f"本地图片读取成功 耗时={elapsed:.3f}s  path={path}")
         return img
 
 

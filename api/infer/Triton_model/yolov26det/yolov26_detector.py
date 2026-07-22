@@ -18,34 +18,48 @@ def yolov26det(triton_client, service_name, init_data, img, label_to_detect,box_
     time_json["model"] = service_name
 
     model_version = ""
-    conf_thres = 0.5
-    iou_thres = 0.5
+    # 默认阈值（如果消息和config都没提供，用这个兜底）
+    default_conf = 0.5
+    default_iou = 0.5
     INPUT_DATA = []
     OUTPUT_DATA = []
     label_names = []
     input_shape = []
+
+    # 1. 从 config.json 读取模型默认阈值
     if not bool(init_data):
         print("模型信息没有读到")
+        conf_thres = default_conf
+        iou_thres = default_iou
     else:
         for key, value in init_data.items():
             if key == service_name:
                 INPUT_DATA = value["input"]
                 OUTPUT_DATA = value["output"]
-                if iou_thres == -1:
-                    iou_thres = iou_thres
-                else:
-                    iou_thres = value["iou_thres"]
-                if conf_thres == -1:
-                    conf_thres = conf_thres
-                else:
-                    conf_thres = value["conf_thres"]
-
+                # config.json 的阈值作为第一优先级默认值
+                conf_thres = value.get("conf_thres", default_conf)
+                iou_thres = value.get("iou_thres", default_iou)
                 model_version = value["model_version"]
                 label_names = value["label_names"]
 
                 for input in INPUT_DATA:
                     input_shape.append(input["dims"][-2])
                     input_shape.append(input["dims"][-1])
+
+    # 2. 从 label_to_detect 提取消息传入的阈值（最高优先级）
+    # label_to_detect 格式: {"26_fire": {"conf": 0.62, "iou": 0.2}, "26_smoke": {"conf": 0.65, "iou": 0.3}, ...}
+    # 保留每个标签独立的阈值字典，供后处理使用
+    label_thresholds = {}
+    if isinstance(label_to_detect, dict):
+        for lbl, rule in label_to_detect.items():
+            if isinstance(rule, dict):
+                label_thresholds[lbl] = {
+                    "conf": float(rule.get("conf", conf_thres)),
+                    "iou": float(rule.get("iou", iou_thres))
+                }
+            else:
+                # 兼容旧格式 label_to_detect 是 list 的情况
+                label_thresholds[lbl] = {"conf": conf_thres, "iou": iou_thres}
     inputs = []
     outputs = []
     output_data = []
@@ -83,20 +97,32 @@ def yolov26det(triton_client, service_name, init_data, img, label_to_detect,box_
         time_json["post_time"] = postprocessing_start - pretreatment_end
         time_json["processing_time"] = postprocessing_end - postprocessing_start
         return result_to_return, time_json
+
     flag = True if len(label_to_detect) == 0 else False
-    detected_objects = postprocess(output_data[0], img.shape[1], img.shape[0], input_shape, conf_thres,
+
+    # postprocess 不做置信度过滤（传 0.0），所有框都通过，由后续的独立阈值过滤
+    detected_objects = postprocess(output_data[0], img.shape[1], img.shape[0], input_shape, 0.0,
                                           iou_thres, label_names)
+
+    # 过滤：每个标签使用独立的阈值
     for i in range(len(detected_objects)):
         box = detected_objects[i]
-        if box.confidence > conf_thres if conf is None else conf:
-            # box.x1 += box_info.x1
-            # box.x2 += box_info.x2
-            # box.y1 += box_info.y1
-            # box.y2 += box_info.y2
+        label_name = label_names[box.classID]
+
+        # 获取该标签的独立阈值
+        if label_name in label_thresholds:
+            label_conf = label_thresholds[label_name]["conf"]
+        else:
+            label_conf = conf_thres  # 降级到全局阈值
+
+        # 置信度过滤
+        if box.confidence > label_conf:
             if flag:
+                # 无标签过滤，返回所有
                 result_to_return.append(box)
             else:
-                if label_names[box.classID] in label_to_detect:
+                # 标签过滤
+                if label_name in label_to_detect:
                     result_to_return.append(box)
 
     postprocessing_end = time.time()  # 时间测试
