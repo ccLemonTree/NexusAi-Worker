@@ -151,6 +151,17 @@ async def run_vlm_tasks(
             results.append("推理异常")
         else:
             results.append(r)
+
+    # 计算总耗时并记录
+    from datetime import datetime
+    try:
+        start_dt = datetime.strptime(scene_start, "%Y-%m-%d %H:%M:%S")
+        end_dt = datetime.strptime(scene_end, "%Y-%m-%d %H:%M:%S")
+        elapsed = (end_dt - start_dt).total_seconds()
+        logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条")
+    except Exception:
+        pass  # 时间解析失败不影响主流程
+
     return results, scene_start, scene_end
 
 
@@ -383,12 +394,26 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
 
 
 async def run_vector_task(img: np.ndarray, msg: AnalyseInputMsg) -> bool:
+    from datetime import datetime
     loop = asyncio.get_event_loop()
+    vector_start = _now_iso()
     try:
         result: bool = await asyncio.wait_for(
             loop.run_in_executor(executor, _call_vector_sync, img, msg.dict()),
             timeout=VECTOR_TIMEOUT,
         )
+        vector_end = _now_iso()
+
+        # 计算耗时并记录
+        try:
+            start_dt = datetime.strptime(vector_start, "%Y-%m-%d %H:%M:%S")
+            end_dt = datetime.strptime(vector_end, "%Y-%m-%d %H:%M:%S")
+            elapsed = (end_dt - start_dt).total_seconds()
+            status = "成功" if result else "无目标或失败"
+            logger.info(f"向量入库完成 耗时={elapsed:.3f}s  status={status}  device_id={msg.deviceId}")
+        except Exception:
+            pass
+
         return result
     except asyncio.TimeoutError:
         logger.error(f"向量入库超时（>{VECTOR_TIMEOUT}s）device_id={msg.deviceId}")
