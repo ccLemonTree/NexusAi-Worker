@@ -56,8 +56,8 @@ async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
     eos=False → path 是容器内本地路径，cv2.imread 读取
     """
     if eos:
+        timeout = int(os.getenv("EOS_TIMEOUT", "15"))
         try:
-            timeout = int(os.getenv("EOS_TIMEOUT", "15"))
             loop = asyncio.get_event_loop()
             data: bytes = await asyncio.wait_for(
                 loop.run_in_executor(executor, _download_eos_sync, path),
@@ -68,8 +68,19 @@ async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
             if img is None:
                 raise ValueError("cv2.imdecode 返回 None，可能不是合法图片")
             return img
+        except asyncio.TimeoutError:
+            logger.error(
+                f"EOS 图片下载超时(>{timeout}s)  endpoint={os.getenv('EOS_ENDPOINT')}  "
+                f"bucket={os.getenv('EOS_BUCKET')}  key={path[:120]}"
+            )
+            return None
         except Exception as e:
-            logger.error(f"EOS 图片下载失败: {e}  key={path[:120]}")
+            logger.error(
+                f"EOS 图片下载失败: [{type(e).__name__}] {e}  "
+                f"endpoint={os.getenv('EOS_ENDPOINT')}  bucket={os.getenv('EOS_BUCKET')}  "
+                f"key={path[:120]}",
+                exc_info=True,
+            )
             return None
     else:
         loop = asyncio.get_event_loop()
