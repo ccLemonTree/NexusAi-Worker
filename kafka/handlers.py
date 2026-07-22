@@ -25,8 +25,8 @@ VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "3"))   # 向量入库超时
 
 
 def _now_iso() -> str:
-    """返回 UTC 时间 ISO8601 字符串，精确到毫秒。"""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    """返回当前时间字符串，格式 yyyy-MM-dd HH:mm:ss"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +323,10 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
             if save_local:
                 large_image_url = _save_obj_image(img, device_id, capture_time)
                 if not large_image_url:
-                    large_image_url = pic_url  # OBJ_SAVE_PIC_LOCPATH 未配置时降级
+                    logger.error(
+                        f"向量入库跳过：大图保存失败 device_id={device_id} pic_url={pic_url}"
+                    )
+                    return False  # 保存失败，不入库
             else:
                 large_image_url = pic_url
 
