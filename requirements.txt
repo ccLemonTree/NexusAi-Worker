@@ -33,4 +33,5 @@ pymilvus==3.0.0
 openai==1.59.3
 
 # ── Object storage (EOS / S3-compatible) ───────────────────────────────────
-boto3==1.38.33
+aioboto3==13.3.0
+boto3==1.38.33  # 保留用于非关键路径的同步调用

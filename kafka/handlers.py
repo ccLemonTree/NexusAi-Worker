@@ -45,35 +45,36 @@ def _to_int(value, default: int = 0) -> int:
 # 图片加载
 # ---------------------------------------------------------------------------
 
-def _download_eos_sync(key: str) -> bytes:
+async def _download_eos_async(key: str) -> bytes:
     """
-    通过 boto3 S3 客户端从 EOS 下载对象，返回原始字节。
+    通过 aioboto3 异步 S3 客户端从 EOS 下载对象，返回原始字节。
+    使用原生 asyncio，避免 boto3 + ThreadPoolExecutor 的锁竞争。
     环境变量：
         EOS_ACCESS_KEY  — AccessKey
         EOS_SECRET_KEY  — SecretKey
         EOS_ENDPOINT    — Endpoint URL，如 https://eos-wuxi-1.cmecloud.cn
         EOS_BUCKET      — Bucket 名称
     """
-    import boto3
-    from boto3.session import Session as _S3Session
+    import aioboto3
 
     # 自动添加协议前缀（防御性处理）
     endpoint = os.getenv("EOS_ENDPOINT", "")
     if endpoint and not endpoint.startswith(("http://", "https://")):
         endpoint = f"http://{endpoint}"
 
-    session = _S3Session(
-        os.getenv("EOS_ACCESS_KEY"),
-        os.getenv("EOS_SECRET_KEY"),
+    session = aioboto3.Session(
+        aws_access_key_id=os.getenv("EOS_ACCESS_KEY"),
+        aws_secret_access_key=os.getenv("EOS_SECRET_KEY"),
     )
-    s3 = session.client("s3", endpoint_url=endpoint)
-    resp = s3.get_object(Bucket=os.getenv("EOS_BUCKET"), Key=key)
-    return resp["Body"].read()
+    async with session.client("s3", endpoint_url=endpoint) as s3:
+        resp = await s3.get_object(Bucket=os.getenv("EOS_BUCKET"), Key=key)
+        # resp['Body'] 是 StreamingBody，需要 read()
+        return await resp["Body"].read()
 
 
 async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
     """
-    eos=True  → path 是 EOS 对象 Key，通过 boto3 S3 客户端下载
+    eos=True  → path 是 EOS 对象 Key，通过 aioboto3 异步下载
     eos=False → path 是容器内本地路径，cv2.imread 读取
     """
     import time as _time
@@ -81,9 +82,8 @@ async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
         timeout = int(os.getenv("EOS_TIMEOUT", "15"))
         t0 = _time.monotonic()
         try:
-            loop = asyncio.get_event_loop()
             data: bytes = await asyncio.wait_for(
-                loop.run_in_executor(io_executor, _download_eos_sync, path),
+                _download_eos_async(path),
                 timeout=timeout,
             )
             elapsed = _time.monotonic() - t0
