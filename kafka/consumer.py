@@ -133,6 +133,8 @@ async def run_consumer() -> None:
         heartbeat_interval_ms=int(os.getenv("KAFKA_HEARTBEAT_INTERVAL_MS", "10000")),
         # 处理慢时留足 poll 间隔，避免被误判死亡触发 rebalance（默认 10 分钟）
         max_poll_interval_ms=int(os.getenv("KAFKA_MAX_POLL_INTERVAL_MS", "600000")),
+        # 单次请求超时（包括启动时的元数据获取和 JoinGroup），默认 40s 太短
+        request_timeout_ms=int(os.getenv("KAFKA_REQUEST_TIMEOUT_MS", "120000")),
         **sasl,
     )
 
