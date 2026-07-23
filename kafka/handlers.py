@@ -29,6 +29,18 @@ def _now_iso() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _to_int(value, default: int = 0) -> int:
+    """安全地把消息字段转成 int（Milvus INT64 字段用）。
+    None / 空串 / 非数字字符串都退回 default，避免 DataNotMatchException。"""
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        logger.warning(f"channel_id 无法转为 int：{value!r}，使用默认值 {default}")
+        return default
+
+
 # ---------------------------------------------------------------------------
 # 图片加载
 # ---------------------------------------------------------------------------
@@ -322,7 +334,8 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
 
     device_id    = msg_dict.get("deviceId", "")
     device_name  = msg_dict.get("device_name", "")
-    channel_id   = msg_dict.get("channel_id", "")
+    # channel_id 在 Milvus schema 中是 INT64，消息里可能是 str/None，需安全转 int
+    channel_id   = _to_int(msg_dict.get("channel_id"), default=0)
     channel_name = msg_dict.get("channel_name", "")
     channel_num  = msg_dict.get("channel_number", "")
     pic_url      = msg_dict.get("path", "")          # EOS 对象 Key
