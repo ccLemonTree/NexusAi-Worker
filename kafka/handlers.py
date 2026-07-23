@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
@@ -45,28 +46,46 @@ def _to_int(value, default: int = 0) -> int:
 # 图片加载
 # ---------------------------------------------------------------------------
 
+# 线程本地存储：每个线程独立持有一个 S3 客户端，避免连接池竞争
+_thread_local = threading.local()
+
+
+def _get_s3_client():
+    """获取当前线程的 S3 客户端（线程安全，按需创建）"""
+    if not hasattr(_thread_local, "s3_client"):
+        from boto3.session import Session as _S3Session
+
+        # 自动添加协议前缀（防御性处理）
+        endpoint = os.getenv("EOS_ENDPOINT", "")
+        if endpoint and not endpoint.startswith(("http://", "https://")):
+            endpoint = f"http://{endpoint}"
+
+        session = _S3Session(
+            os.getenv("EOS_ACCESS_KEY"),
+            os.getenv("EOS_SECRET_KEY"),
+        )
+        # 增大连接池，减少单客户端内的等待
+        _thread_local.s3_client = session.client(
+            "s3",
+            endpoint_url=endpoint,
+            config=__import__("botocore.config", fromlist=["Config"]).Config(
+                max_pool_connections=50,  # 默认 10，增大到 50
+            ),
+        )
+    return _thread_local.s3_client
+
+
 def _download_eos_sync(key: str) -> bytes:
     """
     通过 boto3 S3 客户端从 EOS 下载对象，返回原始字节。
+    每个线程独立持有一个客户端，避免连接池竞争。
     环境变量：
         EOS_ACCESS_KEY  — AccessKey
         EOS_SECRET_KEY  — SecretKey
         EOS_ENDPOINT    — Endpoint URL，如 https://eos-wuxi-1.cmecloud.cn
         EOS_BUCKET      — Bucket 名称
     """
-    import boto3
-    from boto3.session import Session as _S3Session
-
-    # 自动添加协议前缀（防御性处理）
-    endpoint = os.getenv("EOS_ENDPOINT", "")
-    if endpoint and not endpoint.startswith(("http://", "https://")):
-        endpoint = f"http://{endpoint}"
-
-    session = _S3Session(
-        os.getenv("EOS_ACCESS_KEY"),
-        os.getenv("EOS_SECRET_KEY"),
-    )
-    s3 = session.client("s3", endpoint_url=endpoint)
+    s3 = _get_s3_client()
     resp = s3.get_object(Bucket=os.getenv("EOS_BUCKET"), Key=key)
     return resp["Body"].read()
 
