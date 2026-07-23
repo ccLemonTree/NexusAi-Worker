@@ -165,9 +165,10 @@ async def run_vlm_tasks(
     img: np.ndarray, questions: list
 ) -> Tuple[List[str], str, str]:
     """
-    并发调用 VLM，每条 question 独立推理。
+    调用 VLM 推理。
+    注意：chat_infer.infer() 只需要图片，忽略 system/question 参数，
+    且无论 questions 有多少条，只需调用一次即可。
     返回 (结果列表, sceneStartTime, sceneTime)
-    超时时间由 VLM_TIMEOUT 环境变量控制（默认 60s）。
     """
     import time as _time
     _, buf = cv2.imencode(".jpeg", img)
@@ -177,27 +178,23 @@ async def run_vlm_tasks(
     scene_start = _now_iso()
     t0 = _time.monotonic()  # 用于精确计时
 
-    tasks = [
-        loop.run_in_executor(executor, _call_vlm_sync, q["system"], q["question"], img_bytes)
-        for q in questions
-    ]
+    # VLM 只需要图片，调用一次即可，返回结果供所有 questions 使用
     try:
-        raw_results = await asyncio.wait_for(
-            asyncio.gather(*tasks, return_exceptions=True),
+        result = await asyncio.wait_for(
+            loop.run_in_executor(executor, _call_vlm_sync, "", "", img_bytes),
             timeout=VLM_TIMEOUT,
         )
     except asyncio.TimeoutError:
-        logger.error(f"VLM 推理超时（>{VLM_TIMEOUT}s），共 {len(questions)} 条 question")
-        return ["推理超时"] * len(questions), scene_start, _now_iso()
+        logger.error(f"VLM 推理超时（>{VLM_TIMEOUT}s）")
+        result = "推理超时"
+    except Exception as e:
+        logger.error(f"VLM 推理异常: {e}")
+        result = "推理异常"
 
     scene_end = _now_iso()
-    results: List[str] = []
-    for i, r in enumerate(raw_results):
-        if isinstance(r, Exception):
-            logger.error(f"VLM task[{i}] 异常: {r}")
-            results.append("推理异常")
-        else:
-            results.append(r)
+
+    # 所有 questions 共享同一个结果
+    results = [result] * len(questions)
 
     # 计算总耗时并记录（使用 monotonic 精确计时）
     elapsed = _time.monotonic() - t0
