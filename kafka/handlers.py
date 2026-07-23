@@ -6,8 +6,10 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 import aiohttp
+import aioboto3
 import cv2
 import numpy as np
+from botocore.config import Config as BotocoreConfig
 
 from api.infer.Utils.class_info import CameraInfo
 from api.infer.running import _run_analyse_sync, logic_executor as executor
@@ -22,6 +24,20 @@ io_executor = get_io_executor()
 VLM_TIMEOUT    = float(os.getenv("VLM_TIMEOUT",    "3"))   # 大模型单次推理超时（秒）
 MODEL_TIMEOUT  = float(os.getenv("MODEL_TIMEOUT",   "15"))   # 小模型单次推理超时（秒）
 VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "3"))   # 向量入库超时（秒）
+
+# 全局 aioboto3 session，复用连接池
+_eos_session: aioboto3.Session | None = None
+
+
+def _get_eos_session() -> aioboto3.Session:
+    """获取全局 EOS session（懒初始化）"""
+    global _eos_session
+    if _eos_session is None:
+        _eos_session = aioboto3.Session(
+            aws_access_key_id=os.getenv("EOS_ACCESS_KEY"),
+            aws_secret_access_key=os.getenv("EOS_SECRET_KEY"),
+        )
+    return _eos_session
 
 
 def _now_iso() -> str:
@@ -49,24 +65,28 @@ async def _download_eos_async(key: str) -> bytes:
     """
     通过 aioboto3 异步 S3 客户端从 EOS 下载对象，返回原始字节。
     使用原生 asyncio，避免 boto3 + ThreadPoolExecutor 的锁竞争。
+    复用全局 session 连接池，避免每次创建新连接。
     环境变量：
         EOS_ACCESS_KEY  — AccessKey
         EOS_SECRET_KEY  — SecretKey
         EOS_ENDPOINT    — Endpoint URL，如 https://eos-wuxi-1.cmecloud.cn
         EOS_BUCKET      — Bucket 名称
     """
-    import aioboto3
-
     # 自动添加协议前缀（防御性处理）
     endpoint = os.getenv("EOS_ENDPOINT", "")
     if endpoint and not endpoint.startswith(("http://", "https://")):
         endpoint = f"http://{endpoint}"
 
-    session = aioboto3.Session(
-        aws_access_key_id=os.getenv("EOS_ACCESS_KEY"),
-        aws_secret_access_key=os.getenv("EOS_SECRET_KEY"),
-    )
-    async with session.client("s3", endpoint_url=endpoint) as s3:
+    session = _get_eos_session()
+    async with session.client(
+        "s3",
+        endpoint_url=endpoint,
+        config=BotocoreConfig(
+            connect_timeout=5,  # 连接超时 5 秒
+            read_timeout=30,    # 读取超时 30 秒
+            retries={'max_attempts': 2},  # 最多重试 2 次
+        ),
+    ) as s3:
         resp = await s3.get_object(Bucket=os.getenv("EOS_BUCKET"), Key=key)
         # resp['Body'] 是 StreamingBody，需要 read()
         return await resp["Body"].read()
