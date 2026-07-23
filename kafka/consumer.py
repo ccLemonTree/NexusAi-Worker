@@ -141,7 +141,20 @@ async def run_consumer() -> None:
         **sasl,
     )
 
-    await consumer.start()
+    # 启动超时保护：避免 JoinGroup/Rebalance 时无限期卡住
+    startup_timeout = int(os.getenv("KAFKA_STARTUP_TIMEOUT", "180"))  # 默认 3 分钟
+    try:
+        await asyncio.wait_for(consumer.start(), timeout=startup_timeout)
+    except asyncio.TimeoutError:
+        logger.error(
+            f"Kafka consumer 启动超时（>{startup_timeout}s），可能原因：\n"
+            f"  1. Broker 响应慢或不可达\n"
+            f"  2. 消费者数量 > 分区数，导致 rebalance 无法完成\n"
+            f"  3. 其他消费者频繁 rebalance\n"
+            f"当前 topic={KAFKA_INPUT_TOPIC}，请检查 Kafka broker 状态和分区配置"
+        )
+        raise
+
     logger.info(
         f"Kafka consumer started | topic={KAFKA_INPUT_TOPIC} | "
         f"group={KAFKA_GROUP_ID} | max_concurrent={MAX_CONCURRENT}"
