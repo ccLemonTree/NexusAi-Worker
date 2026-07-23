@@ -7,6 +7,12 @@ import signal
 from typing import Set
 
 from aiokafka import AIOKafkaConsumer
+from aiokafka.errors import (
+    CommitFailedError,
+    IllegalGenerationError,
+    IllegalStateError,
+    UnknownMemberIdError,
+)
 from aiokafka.structs import TopicPartition
 
 from kafka.handlers import process_message
@@ -53,20 +59,27 @@ def _register_signals() -> None:
         signal.signal(signal.SIGINT, lambda _s, _f: _shutdown_event.set())
 
 
-def _safe_commit(consumer: AIOKafkaConsumer, tp: TopicPartition, offset: int):
+async def _safe_commit(consumer: AIOKafkaConsumer, tp: TopicPartition, offset: int) -> None:
     """
-    提交 offset，但仅当该分区仍被本消费者持有时才提交。
-    多消费者场景下 rebalance 可能把分区分配给其他消费者，此时 in-flight 任务
-    完成后的 commit 会抛 IllegalStateError。这里先校验分区归属，避免无谓报错。
-    返回一个 awaitable（commit 协程）或 None（跳过 commit）。
+    提交 offset，容忍 rebalance 导致的各种失效场景：
+    - 分区已不在本消费者的 assignment 中（IllegalStateError）
+    - 提交时组已 rebalance / generation 过期 / member 失效
+      （CommitFailedError / IllegalGenerationError / UnknownMemberIdError）
+    这些都是多消费者 rebalance 的正常现象：该 offset 会由新 owner 重新消费。
+    统一降级为 warning，不刷错误堆栈。
     """
+    # 提交前先校验分区归属，能挡掉大部分无谓提交
     if tp not in consumer.assignment():
+        logger.warning(f"跳过 commit：分区 {tp} 已不属于本消费者（rebalance），offset={offset}")
+        return
+    try:
+        await consumer.commit({tp: offset})
+    except (CommitFailedError, IllegalStateError,
+            IllegalGenerationError, UnknownMemberIdError) as e:
         logger.warning(
-            f"跳过 commit：分区 {tp} 已不属于本消费者（rebalance），"
-            f"offset={offset} 将由新 owner 重新消费"
+            f"commit 被 rebalance 打断，跳过 partition={tp.partition} offset={offset}: "
+            f"{type(e).__name__}（该 offset 将由新 owner 重新消费）"
         )
-        return None
-    return consumer.commit({tp: offset})
 
 
 async def _handle_one(
@@ -81,22 +94,15 @@ async def _handle_one(
         result = await process_message(msg.value)
         if result is not None:
             await send_result(result)
-        # 成功：提交该分区的下一个 offset（仅当分区仍被持有）
-        commit_coro = _safe_commit(consumer, tp, msg.offset + 1)
-        if commit_coro is not None:
-            await commit_coro
+        # 成功：提交该分区的下一个 offset
+        await _safe_commit(consumer, tp, msg.offset + 1)
     except Exception as e:
         logger.error(
             f"消息处理失败 topic={msg.topic} partition={msg.partition} offset={msg.offset}: {e}",
             exc_info=True,
         )
-        # 失败：仍然 commit，跳过毒丸消息，防止队列卡死（同样先校验分区归属）
-        try:
-            commit_coro = _safe_commit(consumer, tp, msg.offset + 1)
-            if commit_coro is not None:
-                await commit_coro
-        except Exception as ce:
-            logger.error(f"commit 失败: {ce}")
+        # 失败：仍然 commit，跳过毒丸消息，防止队列卡死
+        await _safe_commit(consumer, tp, msg.offset + 1)
     finally:
         semaphore.release()
 
@@ -123,9 +129,10 @@ async def run_consumer() -> None:
         enable_auto_commit=False,
         auto_offset_reset="latest",
         max_poll_records=MAX_CONCURRENT,
-        session_timeout_ms=30_000,
-        heartbeat_interval_ms=10_000,
-        max_poll_interval_ms=300_000,
+        session_timeout_ms=int(os.getenv("KAFKA_SESSION_TIMEOUT_MS", "30000")),
+        heartbeat_interval_ms=int(os.getenv("KAFKA_HEARTBEAT_INTERVAL_MS", "10000")),
+        # 处理慢时留足 poll 间隔，避免被误判死亡触发 rebalance（默认 10 分钟）
+        max_poll_interval_ms=int(os.getenv("KAFKA_MAX_POLL_INTERVAL_MS", "600000")),
         **sasl,
     )
 

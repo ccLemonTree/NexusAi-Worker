@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 
@@ -50,8 +51,17 @@ async def stop_producer() -> None:
 
 async def send_result(result: dict) -> None:
     topic = os.getenv("KAFKA_RESULT_TOPIC", "model_analyse_result")
+    send_timeout = float(os.getenv("KAFKA_SEND_TIMEOUT", "10"))
     producer = await get_producer()
     msg_id = result.get("id")
     key = str(msg_id).encode("utf-8") if msg_id is not None else None
-    await producer.send_and_wait(topic, result, key=key)
-    logger.debug(f"Result sent  id={msg_id}  topic={topic}")
+    # 加超时：结果 topic 不存在或元数据异常时 send_and_wait 会长时间阻塞，
+    # 导致 _handle_one 卡住不释放并发槽，进而 poll 停摆、消费者被踢出组。
+    try:
+        await asyncio.wait_for(
+            producer.send_and_wait(topic, result, key=key),
+            timeout=send_timeout,
+        )
+        logger.debug(f"Result sent  id={msg_id}  topic={topic}")
+    except asyncio.TimeoutError:
+        logger.error(f"结果发送超时（>{send_timeout}s） id={msg_id}  topic={topic}，跳过")
