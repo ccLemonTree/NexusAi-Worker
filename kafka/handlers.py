@@ -25,8 +25,8 @@ VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "3"))   # 向量入库超时
 
 
 def _now_iso() -> str:
-    """返回当前时间字符串，格式 yyyy-MM-dd HH:mm:ss.fff（毫秒精度）"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    """返回当前时间字符串，格式 yyyy-MM-dd HH:mm:ss（秒精度）"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ---------------------------------------------------------------------------
@@ -160,8 +160,8 @@ async def run_vlm_tasks(
     # 计算总耗时并记录
     from datetime import datetime
     try:
-        start_dt = datetime.strptime(scene_start, "%Y-%m-%d %H:%M:%S.%f")
-        end_dt = datetime.strptime(scene_end, "%Y-%m-%d %H:%M:%S.%f")
+        start_dt = datetime.strptime(scene_start, "%Y-%m-%d %H:%M:%S")
+        end_dt = datetime.strptime(scene_end, "%Y-%m-%d %H:%M:%S")
         elapsed = (end_dt - start_dt).total_seconds()
         logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条")
     except Exception:
@@ -250,8 +250,8 @@ async def run_model_tasks(
     # 计算总耗时并记录
     from datetime import datetime
     try:
-        start_dt = datetime.strptime(model_start, "%Y-%m-%d %H:%M:%S.%f")
-        end_dt = datetime.strptime(model_end, "%Y-%m-%d %H:%M:%S.%f")
+        start_dt = datetime.strptime(model_start, "%Y-%m-%d %H:%M:%S")
+        end_dt = datetime.strptime(model_end, "%Y-%m-%d %H:%M:%S")
         elapsed = (end_dt - start_dt).total_seconds()
         logger.info(f"小模型推理完成 耗时={elapsed:.3f}s  labels={len(labels)}条")
     except Exception:
@@ -411,8 +411,8 @@ async def run_vector_task(img: np.ndarray, msg: AnalyseInputMsg) -> bool:
 
         # 计算耗时并记录
         try:
-            start_dt = datetime.strptime(vector_start, "%Y-%m-%d %H:%M:%S.%f")
-            end_dt = datetime.strptime(vector_end, "%Y-%m-%d %H:%M:%S.%f")
+            start_dt = datetime.strptime(vector_start, "%Y-%m-%d %H:%M:%S")
+            end_dt = datetime.strptime(vector_end, "%Y-%m-%d %H:%M:%S")
             elapsed = (end_dt - start_dt).total_seconds()
             status = "成功" if result else "无目标或失败"
             logger.info(f"向量入库完成 耗时={elapsed:.3f}s  status={status}  device_id={msg.deviceId}")
