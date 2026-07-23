@@ -34,4 +34,4 @@ openai==1.59.3
 
 # ── Object storage (EOS / S3-compatible) ───────────────────────────────────
 aioboto3==13.3.0
-boto3==1.38.33  # 保留用于非关键路径的同步调用
+# boto3 removed - aioboto3 provides both sync and async interfaces
