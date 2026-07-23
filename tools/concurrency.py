@@ -44,7 +44,7 @@ def get_logic_executor() -> ThreadPoolExecutor:
 
 def get_io_executor() -> ThreadPoolExecutor:
     """专用于 I/O 密集型任务（EOS下载、本地文件读取），避免和推理线程竞争。"""
-    return get_executor("IO_MAX_WORKERS", default_scale=2, hard_cap=32, prefix="io")
+    return get_executor("IO_MAX_WORKERS", default_scale=8, hard_cap=64, prefix="io")
 
 
 def get_triton_executor() -> ThreadPoolExecutor:
