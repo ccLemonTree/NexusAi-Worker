@@ -38,6 +38,15 @@ async def get_producer() -> AIOKafkaProducer:
         )
         await _producer.start()
         logger.info(f"Kafka producer started  sasl={'yes' if _sasl_kwargs() else 'no'}")
+    # 防御性检查：producer 对象存在但未正确初始化（_producer_magic 丢失），强制重建
+    elif not hasattr(_producer, "_producer_magic"):
+        logger.warning("Producer 状态异常（_producer_magic 丢失），强制重建")
+        try:
+            await _producer.stop()
+        except Exception:
+            pass
+        _producer = None
+        return await get_producer()  # 递归重建
     return _producer
 
 
@@ -52,12 +61,12 @@ async def stop_producer() -> None:
 async def send_result(result: dict) -> None:
     topic = os.getenv("KAFKA_RESULT_TOPIC", "model_analyse_result")
     send_timeout = float(os.getenv("KAFKA_SEND_TIMEOUT", "10"))
-    producer = await get_producer()
     msg_id = result.get("id")
-    key = str(msg_id).encode("utf-8") if msg_id is not None else None
-    # 加超时：结果 topic 不存在或元数据异常时 send_and_wait 会长时间阻塞，
-    # 导致 _handle_one 卡住不释放并发槽，进而 poll 停摆、消费者被踢出组。
     try:
+        producer = await get_producer()
+        key = str(msg_id).encode("utf-8") if msg_id is not None else None
+        # 加超时：结果 topic 不存在或元数据异常时 send_and_wait 会长时间阻塞，
+        # 导致 _handle_one 卡住不释放并发槽，进而 poll 停摆、消费者被踢出组。
         await asyncio.wait_for(
             producer.send_and_wait(topic, result, key=key),
             timeout=send_timeout,
@@ -65,3 +74,9 @@ async def send_result(result: dict) -> None:
         logger.debug(f"Result sent  id={msg_id}  topic={topic}")
     except asyncio.TimeoutError:
         logger.error(f"结果发送超时（>{send_timeout}s） id={msg_id}  topic={topic}，跳过")
+    except AttributeError as e:
+        # producer 状态异常（_producer_magic 等内部属性丢失）
+        logger.error(f"Producer 状态异常 id={msg_id}: {e}，跳过本次发送")
+    except Exception as e:
+        # 其他异常（网络、broker 不可达等）
+        logger.error(f"结果发送失败 id={msg_id}  topic={topic}: {e}")
