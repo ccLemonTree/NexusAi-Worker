@@ -25,8 +25,8 @@ VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "3"))   # 向量入库超时
 
 
 def _now_iso() -> str:
-    """返回当前时间字符串，格式 yyyy-MM-dd HH:mm:ss（秒精度）"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """返回当前时间字符串，格式 yyyy-MM-dd HH:mm:ss.fff（毫秒精度）"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 
 def _to_int(value, default: int = 0) -> int:
@@ -172,8 +172,8 @@ async def run_vlm_tasks(
     # 计算总耗时并记录
     from datetime import datetime
     try:
-        start_dt = datetime.strptime(scene_start, "%Y-%m-%d %H:%M:%S")
-        end_dt = datetime.strptime(scene_end, "%Y-%m-%d %H:%M:%S")
+        start_dt = datetime.strptime(scene_start, "%Y-%m-%d %H:%M:%S.%f")
+        end_dt = datetime.strptime(scene_end, "%Y-%m-%d %H:%M:%S.%f")
         elapsed = (end_dt - start_dt).total_seconds()
         logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条")
     except Exception:
@@ -262,8 +262,8 @@ async def run_model_tasks(
     # 计算总耗时并记录
     from datetime import datetime
     try:
-        start_dt = datetime.strptime(model_start, "%Y-%m-%d %H:%M:%S")
-        end_dt = datetime.strptime(model_end, "%Y-%m-%d %H:%M:%S")
+        start_dt = datetime.strptime(model_start, "%Y-%m-%d %H:%M:%S.%f")
+        end_dt = datetime.strptime(model_end, "%Y-%m-%d %H:%M:%S.%f")
         elapsed = (end_dt - start_dt).total_seconds()
         logger.info(f"小模型推理完成 耗时={elapsed:.3f}s  labels={len(labels)}条")
     except Exception:
