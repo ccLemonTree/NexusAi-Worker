@@ -25,19 +25,41 @@ VLM_TIMEOUT    = float(os.getenv("VLM_TIMEOUT",    "3"))   # 大模型单次推�
 MODEL_TIMEOUT  = float(os.getenv("MODEL_TIMEOUT",   "15"))   # 小模型单次推理超时（秒）
 VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "3"))   # 向量入库超时（秒）
 
-# 全局 aioboto3 session，复用连接池
+# 全局 aioboto3 session 和 client，复用连接池
 _eos_session: aioboto3.Session | None = None
+_eos_client = None
+_eos_client_lock = asyncio.Lock()
 
 
-def _get_eos_session() -> aioboto3.Session:
-    """获取全局 EOS session（懒初始化）"""
-    global _eos_session
-    if _eos_session is None:
-        _eos_session = aioboto3.Session(
-            aws_access_key_id=os.getenv("EOS_ACCESS_KEY"),
-            aws_secret_access_key=os.getenv("EOS_SECRET_KEY"),
-        )
-    return _eos_session
+async def _get_eos_client():
+    """获取全局 EOS S3 client（懒初始化，线程安全）"""
+    global _eos_session, _eos_client
+
+    async with _eos_client_lock:
+        if _eos_client is None:
+            # 自动添加协议前缀（防御性处理）
+            endpoint = os.getenv("EOS_ENDPOINT", "")
+            if endpoint and not endpoint.startswith(("http://", "https://")):
+                endpoint = f"http://{endpoint}"
+
+            _eos_session = aioboto3.Session(
+                aws_access_key_id=os.getenv("EOS_ACCESS_KEY"),
+                aws_secret_access_key=os.getenv("EOS_SECRET_KEY"),
+            )
+
+            # 创建持久化的 client（不使用 context manager）
+            _eos_client = await _eos_session.client(
+                "s3",
+                endpoint_url=endpoint,
+                config=BotocoreConfig(
+                    connect_timeout=5,  # 连接超时 5 秒
+                    read_timeout=30,    # 读取超时 30 秒
+                    retries={'max_attempts': 2},  # 最多重试 2 次
+                    max_pool_connections=50,  # 增加连接池大小，支持高并发
+                ),
+            ).__aenter__()
+
+        return _eos_client
 
 
 def _now_iso() -> str:
@@ -65,31 +87,17 @@ async def _download_eos_async(key: str) -> bytes:
     """
     通过 aioboto3 异步 S3 客户端从 EOS 下载对象，返回原始字节。
     使用原生 asyncio，避免 boto3 + ThreadPoolExecutor 的锁竞争。
-    复用全局 session 连接池，避免每次创建新连接。
+    复用全局 client 连接池，避免每次创建新连接。
     环境变量：
         EOS_ACCESS_KEY  — AccessKey
         EOS_SECRET_KEY  — SecretKey
         EOS_ENDPOINT    — Endpoint URL，如 https://eos-wuxi-1.cmecloud.cn
         EOS_BUCKET      — Bucket 名称
     """
-    # 自动添加协议前缀（防御性处理）
-    endpoint = os.getenv("EOS_ENDPOINT", "")
-    if endpoint and not endpoint.startswith(("http://", "https://")):
-        endpoint = f"http://{endpoint}"
-
-    session = _get_eos_session()
-    async with session.client(
-        "s3",
-        endpoint_url=endpoint,
-        config=BotocoreConfig(
-            connect_timeout=5,  # 连接超时 5 秒
-            read_timeout=30,    # 读取超时 30 秒
-            retries={'max_attempts': 2},  # 最多重试 2 次
-        ),
-    ) as s3:
-        resp = await s3.get_object(Bucket=os.getenv("EOS_BUCKET"), Key=key)
-        # resp['Body'] 是 StreamingBody，需要 read()
-        return await resp["Body"].read()
+    s3 = await _get_eos_client()
+    resp = await s3.get_object(Bucket=os.getenv("EOS_BUCKET"), Key=key)
+    # resp['Body'] 是 StreamingBody，需要 read()
+    return await resp["Body"].read()
 
 
 async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
