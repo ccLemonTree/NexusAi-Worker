@@ -45,11 +45,16 @@ def _download_eos_sync(key: str) -> bytes:
     import boto3
     from boto3.session import Session as _S3Session
 
+    # 自动添加协议前缀（防御性处理）
+    endpoint = os.getenv("EOS_ENDPOINT", "")
+    if endpoint and not endpoint.startswith(("http://", "https://")):
+        endpoint = f"http://{endpoint}"
+
     session = _S3Session(
         os.getenv("EOS_ACCESS_KEY"),
         os.getenv("EOS_SECRET_KEY"),
     )
-    s3 = session.client("s3", endpoint_url=os.getenv("EOS_ENDPOINT"))
+    s3 = session.client("s3", endpoint_url=endpoint)
     resp = s3.get_object(Bucket=os.getenv("EOS_BUCKET"), Key=key)
     return resp["Body"].read()
 
