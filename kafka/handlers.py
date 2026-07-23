@@ -21,7 +21,7 @@ from tools.logger_tools import Kafka_Handler_logger as logger
 # I/O 密集型任务专用线程池（EOS 下载、本地文件读取），与推理线程池隔离
 io_executor = get_io_executor()
 
-VLM_TIMEOUT    = float(os.getenv("VLM_TIMEOUT",    "3"))   # 大模型单次推理超时（秒）
+VLM_TIMEOUT    = float(os.getenv("VLM_TIMEOUT",    "10"))   # 大模型单次推理超时（秒）
 MODEL_TIMEOUT  = float(os.getenv("MODEL_TIMEOUT",   "15"))   # 小模型单次推理超时（秒）
 VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "3"))   # 向量入库超时（秒）
 
