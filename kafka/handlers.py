@@ -25,8 +25,8 @@ VECTOR_TIMEOUT = float(os.getenv("VECTOR_TIMEOUT",  "3"))   # 向量入库超时
 
 
 def _now_iso() -> str:
-    """返回当前时间字符串，格式 yyyy-MM-dd HH:mm:ss.fff（毫秒精度）"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    """返回当前时间字符串，格式 yyyy-MM-dd HH:mm:ss（秒精度）"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _to_int(value, default: int = 0) -> int:
@@ -141,11 +141,13 @@ async def run_vlm_tasks(
     返回 (结果列表, sceneStartTime, sceneTime)
     超时时间由 VLM_TIMEOUT 环境变量控制（默认 60s）。
     """
+    import time as _time
     _, buf = cv2.imencode(".jpeg", img)
     img_bytes: bytes = buf.tobytes()
 
     loop = asyncio.get_event_loop()
     scene_start = _now_iso()
+    t0 = _time.monotonic()  # 用于精确计时
 
     tasks = [
         loop.run_in_executor(executor, _call_vlm_sync, q["system"], q["question"], img_bytes)
@@ -169,15 +171,9 @@ async def run_vlm_tasks(
         else:
             results.append(r)
 
-    # 计算总耗时并记录
-    from datetime import datetime
-    try:
-        start_dt = datetime.strptime(scene_start, "%Y-%m-%d %H:%M:%S.%f")
-        end_dt = datetime.strptime(scene_end, "%Y-%m-%d %H:%M:%S.%f")
-        elapsed = (end_dt - start_dt).total_seconds()
-        logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条")
-    except Exception:
-        pass  # 时间解析失败不影响主流程
+    # 计算总耗时并记录（使用 monotonic 精确计时）
+    elapsed = _time.monotonic() - t0
+    logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条")
 
     return results, scene_start, scene_end
 
@@ -230,8 +226,10 @@ async def run_model_tasks(
     返回 (结果列表, modelStartTime, modelTime)
     超时时间由 MODEL_TIMEOUT 环境变量控制（默认 30s）。
     """
+    import time as _time
     loop = asyncio.get_event_loop()
     model_start = _now_iso()
+    t0 = _time.monotonic()  # 用于精确计时
 
     tasks = [
         loop.run_in_executor(executor, _call_model_sync, img, entry)
@@ -259,15 +257,9 @@ async def run_model_tasks(
         else:
             results.append(r)
 
-    # 计算总耗时并记录
-    from datetime import datetime
-    try:
-        start_dt = datetime.strptime(model_start, "%Y-%m-%d %H:%M:%S.%f")
-        end_dt = datetime.strptime(model_end, "%Y-%m-%d %H:%M:%S.%f")
-        elapsed = (end_dt - start_dt).total_seconds()
-        logger.info(f"小模型推理完成 耗时={elapsed:.3f}s  labels={len(labels)}条")
-    except Exception:
-        pass  # 时间解析失败不影响主流程
+    # 计算总耗时并记录（使用 monotonic 精确计时）
+    elapsed = _time.monotonic() - t0
+    logger.info(f"小模型推理完成 耗时={elapsed:.3f}s  labels={len(labels)}条")
 
     return results, model_start, model_end
 
