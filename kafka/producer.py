@@ -8,6 +8,7 @@ from aiokafka import AIOKafkaProducer
 from tools.logger_tools import Kafka_Producer_logger as logger
 
 _producer: AIOKafkaProducer | None = None
+_producer_lock = asyncio.Lock()  # 保护 producer 初始化的异步锁
 
 
 def _sasl_kwargs() -> dict:
@@ -28,34 +29,36 @@ def _sasl_kwargs() -> dict:
 
 async def get_producer() -> AIOKafkaProducer:
     global _producer
-    if _producer is None:
-        _producer = AIOKafkaProducer(
-            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP", "192.168.1.115:9092"),
-            value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
-            acks="all",
-            compression_type="gzip",
-            **_sasl_kwargs(),
-        )
-        await _producer.start()
-        logger.info(f"Kafka producer started  sasl={'yes' if _sasl_kwargs() else 'no'}")
-    # 防御性检查：producer 对象存在但未正确初始化（_producer_magic 丢失），强制重建
-    elif not hasattr(_producer, "_producer_magic"):
-        logger.warning("Producer 状态异常（_producer_magic 丢失），强制重建")
-        try:
-            await _producer.stop()
-        except Exception:
-            pass
-        _producer = None
-        return await get_producer()  # 递归重建
-    return _producer
+    async with _producer_lock:
+        if _producer is None:
+            _producer = AIOKafkaProducer(
+                bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP", "192.168.1.115:9092"),
+                value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
+                acks="all",
+                compression_type="gzip",
+                **_sasl_kwargs(),
+            )
+            await _producer.start()
+            logger.info(f"Kafka producer started  sasl={'yes' if _sasl_kwargs() else 'no'}")
+        # 防御性检查：producer 对象存在但未正确初始化（_producer_magic 丢失），强制重建
+        elif not hasattr(_producer, "_producer_magic"):
+            logger.warning("Producer 状态异常（_producer_magic 丢失），强制重建")
+            try:
+                await _producer.stop()
+            except Exception:
+                pass
+            _producer = None
+            return await get_producer()  # 递归重建
+        return _producer
 
 
 async def stop_producer() -> None:
     global _producer
-    if _producer is not None:
-        await _producer.stop()
-        _producer = None
-        logger.info("Kafka producer stopped")
+    async with _producer_lock:
+        if _producer is not None:
+            await _producer.stop()
+            _producer = None
+            logger.info("Kafka producer stopped")
 
 
 async def send_result(result: dict) -> None:
