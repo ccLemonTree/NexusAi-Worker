@@ -350,16 +350,16 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
     from datetime import datetime
 
     device_id    = msg_dict.get("deviceId", "")
-    device_name  = msg_dict.get("device_name", "")
-    # channel_id 在 Milvus schema 中是 INT64，消息里可能是 str/None，需安全转 int
-    channel_id   = _to_int(msg_dict.get("channel_id"), default=0)
-    channel_name = msg_dict.get("channel_name", "")
-    channel_num  = msg_dict.get("channel_number", "")
+    device_name  = msg_dict.get("deviceName", "")
+    # channelId 在 Milvus schema 中是 INT64，消息里可能是 str/None，需安全转 int
+    channel_id   = _to_int(msg_dict.get("channelId"), default=0)
+    channel_name = msg_dict.get("channelName", "")
+    channel_num  = msg_dict.get("channelNumber", "")
     pic_url      = msg_dict.get("path", "")          # EOS 对象 Key
-    save_local   = msg_dict.get("save_local", True)  # False = 不保存目标图到本地
+    save_local   = msg_dict.get("saveLocal", True)  # False = 不保存目标图到本地
 
-    # capture_time：优先用消息里的 int 时间戳，否则用当前时间
-    raw_ts = msg_dict.get("capture_time")
+    # captureTime：优先用消息里的 int 时间戳，否则用当前时间
+    raw_ts = msg_dict.get("captureTime")
     if raw_ts:
         capture_time = int(raw_ts)
         partition_name = f"p_{datetime.fromtimestamp(capture_time).strftime('%Y%m%d')}"
