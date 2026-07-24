@@ -30,26 +30,20 @@ class AnalyseInputMsg(BaseModel):
     channelId: str = ""
     channelName: str = ""
     channelNumber: str = ""
-    captureTime: Optional[int] = None   # Unix 时间戳（秒），也接受 'YYYY-MM-DD HH:MM:SS' 字符串
+    captureTime: Optional[str] = None    # 'YYYY-MM-DD HH:MM:SS'，也接受 int 时间戳（自动转换）
+    snapshotTime: str = ""               # 快照时间，'YYYY-MM-DD HH:MM:SS'
 
     @field_validator("captureTime", mode="before")
     @classmethod
     def parse_capture_time(cls, v):
         if v is None or v == "":
             return None
-        if isinstance(v, int):
-            return v
         if isinstance(v, str):
-            try:
-                return int(v)
-            except ValueError:
-                pass
-            # 尝试解析 'YYYY-MM-DD HH:MM:SS' 格式
-            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"):
-                try:
-                    return int(datetime.strptime(v, fmt).timestamp())
-                except ValueError:
-                    continue
+            # 已经是字符串格式，直接返回
+            return v
+        if isinstance(v, int):
+            # int 时间戳 → 'YYYY-MM-DD HH:MM:SS'
+            return datetime.fromtimestamp(v).strftime("%Y-%m-%d %H:%M:%S")
         raise ValueError(f"captureTime 无法解析：{v!r}，支持格式：int 时间戳 或 'YYYY-MM-DD HH:MM:SS'")
 
 
@@ -72,7 +66,8 @@ class AnalyseResultMsg(BaseModel):
     channelId: str = ""
     channelName: str = ""
     channelNumber: str = ""
-    captureTime: Optional[int] = None   # Unix 时间戳（秒）
+    captureTime: Optional[str] = None   # 'YYYY-MM-DD HH:MM:SS'
+    snapshotTime: str = ""              # 快照时间，'YYYY-MM-DD HH:MM:SS'
     questionsRes: List[str] = []
     vectorRes: bool = False
     sceneStartTime: str = ""  # VLM 开始时间

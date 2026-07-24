@@ -358,10 +358,13 @@ def _call_vector_sync(img: np.ndarray, msg_dict: dict) -> bool:
     pic_url      = msg_dict.get("path", "")          # EOS 对象 Key
     save_local   = msg_dict.get("saveLocal", True)  # False = 不保存目标图到本地
 
-    # captureTime：优先用消息里的 int 时间戳，否则用当前时间
+    # captureTime：现在是 'YYYY-MM-DD HH:MM:SS' 字符串，转为 int 供 Milvus 使用
     raw_ts = msg_dict.get("captureTime")
     if raw_ts:
-        capture_time = int(raw_ts)
+        try:
+            capture_time = int(datetime.strptime(raw_ts, "%Y-%m-%d %H:%M:%S").timestamp())
+        except (ValueError, TypeError):
+            capture_time = int(datetime.now().timestamp())
         partition_name = f"p_{datetime.fromtimestamp(capture_time).strftime('%Y%m%d')}"
     else:
         now = datetime.now()
@@ -530,6 +533,7 @@ async def process_message(raw: bytes) -> Optional[dict]:
         channelName=msg.channelName,
         channelNumber=msg.channelNumber,
         captureTime=msg.captureTime,
+        snapshotTime=msg.snapshotTime,
         questionsRes=questions_result,
         vectorRes=vector_ok,
         sceneStartTime=scene_start,
