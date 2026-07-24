@@ -21,15 +21,15 @@ class AnalyseInputMsg(BaseModel):
     eos: bool = False
     path: str = ""            # eos=false 时为本地路径，eos=true 时为 EOS 对象 Key
     vector: bool = False
-    save_local: bool = True    # False = 不保存裁剪目标图到本地，仅用 EOS key 作为 large_image_url
+    saveLocal: bool = True    # False = 不保存裁剪目标图到本地，仅用 EOS key 作为 large_image_url
     questions: Optional[List[QuestionEntry]] = None
     labels: Optional[List[LabelEntry]] = None
     # vector=true 时传入，用于 milvus_insert
-    device_name: str = ""
-    channel_id: str = ""
-    channel_name: str = ""
-    channel_number: str = ""
-    capture_time: Optional[int] = None   # Unix 时间戳（秒）
+    deviceName: str = ""
+    channelId: str = ""
+    channelName: str = ""
+    channelNumber: str = ""
+    captureTime: Optional[int] = None   # Unix 时间戳（秒）
 
 
 class LabelResult(BaseModel):
@@ -44,18 +44,18 @@ class AnalyseResultMsg(BaseModel):
     eos: bool = False
     path: str = ""            # eos=false 时为本地路径，eos=true 时为 EOS 对象 Key
     vector: bool = False
-    save_local: bool = True    # False = 不保存裁剪目标图到本地，仅用 EOS key 作为 large_image_url
+    saveLocal: bool = True    # False = 不保存裁剪目标图到本地，仅用 EOS key 作为 large_image_url
     questions: Optional[List[QuestionEntry]] = None
     labels: Optional[List[LabelEntry]] = None
-    device_name: str = ""
-    channel_id: str = ""
-    channel_name: str = ""
-    channel_number: str = ""
-    capture_time: Optional[int] = None   # Unix 时间戳（秒）
-    questions_res: List[str] = []
-    vector_res: bool = False
+    deviceName: str = ""
+    channelId: str = ""
+    channelName: str = ""
+    channelNumber: str = ""
+    captureTime: Optional[int] = None   # Unix 时间戳（秒）
+    questionsRes: List[str] = []
+    vectorRes: bool = False
     sceneStartTime: str = ""  # VLM 开始时间
     sceneTime: str = ""       # VLM 结束时间
     modelStartTime: str = ""  # 小模型开始时间
     modelTime: str = ""       # 小模型结束时间
-    labels_res: List[LabelResult] = []
+    labelsRes: List[LabelResult] = []
