@@ -514,16 +514,29 @@ async def process_message(raw: bytes) -> Optional[dict]:
         elif tag == "vector":
             vector_ok = bool(result)  # True=至少入库一条，False=无目标或异常
 
-    # 4. 组装结果
+    # 4. 组装结果：返回所有输入参数 + 推理结果
     output = AnalyseResultMsg(
         id=msg.id,
-        questions=questions_result,
-        vector=vector_ok,
+        deviceId=msg.deviceId,
+        presetId=msg.presetId,
+        eos=msg.eos,
+        path=msg.path,
+        vector=msg.vector,
+        save_local=msg.save_local,
+        questions=msg.questions,
+        labels=msg.labels,
+        device_name=msg.device_name,
+        channel_id=msg.channel_id,
+        channel_name=msg.channel_name,
+        channel_number=msg.channel_number,
+        capture_time=msg.capture_time,
+        questions_res=questions_result,
+        vector_res=vector_ok,
         sceneStartTime=scene_start,
         sceneTime=scene_end,
         modelStartTime=model_start,
         modelTime=model_end,
-        labels=[LabelResult(**r) for r in labels_result],
+        labels_res=[LabelResult(**r) for r in labels_result],
     )
 
     logger.info(f"Done id={msg.id}  questions={len(questions_result)}  labels={len(labels_result)}")
