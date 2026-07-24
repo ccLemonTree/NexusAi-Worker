@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Any, List, Optional
-from pydantic import BaseModel
+from typing import Any, List, Optional, Union
+from datetime import datetime
+from pydantic import BaseModel, field_validator
 
 
 class QuestionEntry(BaseModel):
@@ -29,7 +30,27 @@ class AnalyseInputMsg(BaseModel):
     channelId: str = ""
     channelName: str = ""
     channelNumber: str = ""
-    captureTime: Optional[int] = None   # Unix 时间戳（秒）
+    captureTime: Optional[int] = None   # Unix 时间戳（秒），也接受 'YYYY-MM-DD HH:MM:SS' 字符串
+
+    @field_validator("captureTime", mode="before")
+    @classmethod
+    def parse_capture_time(cls, v):
+        if v is None or v == "":
+            return None
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                pass
+            # 尝试解析 'YYYY-MM-DD HH:MM:SS' 格式
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"):
+                try:
+                    return int(datetime.strptime(v, fmt).timestamp())
+                except ValueError:
+                    continue
+        raise ValueError(f"captureTime 无法解析：{v!r}，支持格式：int 时间戳 或 'YYYY-MM-DD HH:MM:SS'")
 
 
 class LabelResult(BaseModel):
