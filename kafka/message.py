@@ -1,7 +1,39 @@
 from __future__ import annotations
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional
 from datetime import datetime
 from pydantic import BaseModel, field_validator
+
+
+def _to_datetime_str(v, nullable: bool = False) -> Optional[str]:
+    """将任意时间格式统一转为 'YYYY-MM-DD HH:MM:SS'。
+
+    支持：
+      - int / float   Unix 时间戳（秒）
+      - str 数字      纯数字字符串，当作 Unix 时间戳
+      - str 日期时间  'YYYY-MM-DD HH:MM:SS' / ISO 8601 等常见格式
+      - None / ''     nullable=True 返回 None，否则返回 ''
+    """
+    if v is None or v == "":
+        return None if nullable else ""
+    if isinstance(v, (int, float)):
+        return datetime.fromtimestamp(int(v)).strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(v, str):
+        # 纯数字字符串 → Unix 时间戳
+        if v.strip().isdigit():
+            return datetime.fromtimestamp(int(v.strip())).strftime("%Y-%m-%d %H:%M:%S")
+        # 逐一尝试常见格式
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y/%m/%d %H:%M:%S",
+            "%Y%m%d%H%M%S",
+        ):
+            try:
+                return datetime.strptime(v.strip(), fmt).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                continue
+    raise ValueError(f"无法解析时间：{v!r}")
 
 
 class QuestionEntry(BaseModel):
@@ -30,21 +62,18 @@ class AnalyseInputMsg(BaseModel):
     channelId: str = ""
     channelName: str = ""
     channelNumber: str = ""
-    captureTime: Optional[str] = None    # 'YYYY-MM-DD HH:MM:SS'，也接受 int 时间戳（自动转换）
-    snapshotTime: str = ""               # 快照时间，'YYYY-MM-DD HH:MM:SS'
+    captureTime: Optional[str] = None  # 统一格式 'YYYY-MM-DD HH:MM:SS'
+    snapshotTime: str = ""             # 统一格式 'YYYY-MM-DD HH:MM:SS'
 
     @field_validator("captureTime", mode="before")
     @classmethod
-    def parse_capture_time(cls, v):
-        if v is None or v == "":
-            return None
-        if isinstance(v, str):
-            # 已经是字符串格式，直接返回
-            return v
-        if isinstance(v, int):
-            # int 时间戳 → 'YYYY-MM-DD HH:MM:SS'
-            return datetime.fromtimestamp(v).strftime("%Y-%m-%d %H:%M:%S")
-        raise ValueError(f"captureTime 无法解析：{v!r}，支持格式：int 时间戳 或 'YYYY-MM-DD HH:MM:SS'")
+    def normalize_capture_time(cls, v):
+        return _to_datetime_str(v, nullable=True)
+
+    @field_validator("snapshotTime", mode="before")
+    @classmethod
+    def normalize_snapshot_time(cls, v):
+        return _to_datetime_str(v, nullable=False)
 
 
 class LabelResult(BaseModel):
@@ -66,8 +95,8 @@ class AnalyseResultMsg(BaseModel):
     channelId: str = ""
     channelName: str = ""
     channelNumber: str = ""
-    captureTime: Optional[str] = None   # 'YYYY-MM-DD HH:MM:SS'
-    snapshotTime: str = ""              # 快照时间，'YYYY-MM-DD HH:MM:SS'
+    captureTime: Optional[str] = None  # 统一格式 'YYYY-MM-DD HH:MM:SS'
+    snapshotTime: str = ""             # 统一格式 'YYYY-MM-DD HH:MM:SS'
     questionsRes: List[str] = []
     vectorRes: bool = False
     sceneStartTime: str = ""  # VLM 开始时间
