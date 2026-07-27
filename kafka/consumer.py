@@ -17,6 +17,7 @@ from aiokafka.structs import TopicPartition
 
 from kafka.handlers import process_message
 from kafka.producer import send_result, stop_producer
+from kafka.stats import get_stats_collector, start_stats_task
 from tools.logger_tools import Kafka_Consumer_logger as logger
 
 KAFKA_BOOTSTRAP     = os.getenv("KAFKA_BOOTSTRAP",      "192.168.1.115:9092")
@@ -90,10 +91,19 @@ async def _handle_one(
 ) -> None:
     """处理单条消息：推理 → 发送结果 → commit offset。"""
     tp = TopicPartition(msg.topic, msg.partition)
+    stats = get_stats_collector()
+
     try:
+        # 记录消费
+        stats.record_consumed()
+
         result = await process_message(msg.value)
         # process_message 现在总是返回结果（包括错误情况）
         await send_result(result)
+
+        # 记录生产
+        stats.record_produced()
+
         # 成功：提交该分区的下一个 offset
         await _safe_commit(consumer, tp, msg.offset + 1)
     except Exception as e:
@@ -115,6 +125,9 @@ async def run_consumer() -> None:
     - 收到 SIGTERM/SIGINT 后优雅退出：等待 in-flight 任务完成再 stop
     """
     _register_signals()
+
+    # 启动统计后台任务
+    start_stats_task()
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
     pending: Set[asyncio.Task] = set()
