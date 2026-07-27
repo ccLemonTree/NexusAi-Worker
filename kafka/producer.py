@@ -74,7 +74,12 @@ async def send_result(result: dict) -> None:
             producer.send_and_wait(topic, result, key=key),
             timeout=send_timeout,
         )
-        logger.debug(f"Result sent  id={msg_id}  topic={topic}")
+        # 记录成功发送（info 级别，方便统计）
+        error = result.get("error", "")
+        if error:
+            logger.info(f"结果已发送（含错误） id={msg_id}  error={error[:50]}")
+        else:
+            logger.info(f"结果已发送（成功） id={msg_id}")
     except asyncio.TimeoutError:
         logger.error(f"结果发送超时（>{send_timeout}s） id={msg_id}  topic={topic}，跳过")
     except AttributeError as e:
