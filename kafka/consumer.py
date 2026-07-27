@@ -101,9 +101,6 @@ async def _handle_one(
         # process_message 现在总是返回结果（包括错误情况）
         await send_result(result)
 
-        # 记录生产
-        stats.record_produced()
-
         # 成功：提交该分区的下一个 offset
         await _safe_commit(consumer, tp, msg.offset + 1)
     except Exception as e:
@@ -114,6 +111,8 @@ async def _handle_one(
         # 失败：仍然 commit，跳过毒丸消息，防止队列卡死
         await _safe_commit(consumer, tp, msg.offset + 1)
     finally:
+        # 无论成功失败都统计生产（记录的是"尝试处理"的消息数）
+        stats.record_produced()
         semaphore.release()
 
 
