@@ -1,8 +1,8 @@
 """
 Kafka 消费/生产统计模块
 - 按分钟统计消费和生产的消息条数
+- 所有 worker 写入同一个 CSV 文件，通过 worker 列区分
 - 定时写入本地 CSV 文件
-- 每个服务实例独立记录
 """
 import csv
 import os
@@ -25,33 +25,33 @@ class KafkaStatsCollector:
         # 主机名（区分不同服务实例）
         self.hostname = os.getenv("HOSTNAME", "unknown")
 
-        # 当前分钟的计数器：{minute_key: {"consumed": count, "produced": count}}
+        # 当前分钟的计数器
         self.current_minute = self._current_minute_key()
         self.consumed_count = 0
         self.produced_count = 0
         self.lock = Lock()
 
-        # CSV 文件路径：kafka_stats_{hostname}_{date}.csv
+        # CSV 文件路径：kafka_stats_{date}.csv（所有 worker 共享）
         self.csv_path = self._get_csv_path()
         self._init_csv()
 
-        logger.info(f"统计模块已启动 hostname={self.hostname} csv={self.csv_path}")
+        logger.info(f"统计模块已启动 worker={self.hostname} csv={self.csv_path}")
 
     def _current_minute_key(self) -> str:
         """返回当前分钟的 key，格式 'YYYY-MM-DD HH:MM'"""
         return datetime.now().strftime("%Y-%m-%d %H:%M")
 
     def _get_csv_path(self) -> Path:
-        """生成 CSV 文件路径：kafka_stats_{hostname}_{date}.csv"""
+        """生成 CSV 文件路径：kafka_stats_{date}.csv"""
         date_str = datetime.now().strftime("%Y%m%d")
-        return self.stats_dir / f"kafka_stats_{self.hostname}_{date_str}.csv"
+        return self.stats_dir / f"kafka_stats_{date_str}.csv"
 
     def _init_csv(self):
         """如果 CSV 文件不存在，创建并写入表头"""
         if not self.csv_path.exists():
             with open(self.csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["timestamp", "consumed", "produced"])
+                writer.writerow(["timestamp", "worker", "consumed", "produced"])
             logger.info(f"创建统计文件: {self.csv_path}")
 
     def record_consumed(self):
@@ -76,17 +76,19 @@ class KafkaStatsCollector:
                 self.csv_path = new_csv
                 self._init_csv()
 
-            # 写入 CSV
+            # 写入 CSV（追加模式，多个 worker 同时写入同一文件）
             with open(self.csv_path, "a", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
                     self.current_minute,
+                    self.hostname,
                     self.consumed_count,
                     self.produced_count,
                 ])
 
             logger.info(
-                f"统计写入 {self.current_minute}  consumed={self.consumed_count}  produced={self.produced_count}"
+                f"统计写入 {self.current_minute}  worker={self.hostname}  "
+                f"consumed={self.consumed_count}  produced={self.produced_count}"
             )
 
             # 重置计数器
