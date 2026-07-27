@@ -29,6 +29,7 @@ class KafkaStatsCollector:
         self.current_minute = self._current_minute_key()
         self.consumed_count = 0
         self.produced_count = 0
+        self.error_count = 0      # 新增：错误计数
         self.lock = Lock()
 
         # CSV 文件路径：kafka_stats_{date}.csv（所有 worker 共享）
@@ -51,7 +52,7 @@ class KafkaStatsCollector:
         if not self.csv_path.exists():
             with open(self.csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["timestamp", "worker", "consumed", "produced"])
+                writer.writerow(["timestamp", "worker", "consumed", "produced", "errors"])
             logger.info(f"创建统计文件: {self.csv_path}")
 
     def record_consumed(self):
@@ -63,6 +64,11 @@ class KafkaStatsCollector:
         """记录一条生产"""
         with self.lock:
             self.produced_count += 1
+
+    def record_error(self):
+        """记录一条错误"""
+        with self.lock:
+            self.error_count += 1
 
     def _flush_to_csv(self):
         """将当前分钟的统计写入 CSV"""
@@ -84,16 +90,18 @@ class KafkaStatsCollector:
                     self.hostname,
                     self.consumed_count,
                     self.produced_count,
+                    self.error_count,
                 ])
 
             logger.info(
                 f"统计写入 {self.current_minute}  worker={self.hostname}  "
-                f"consumed={self.consumed_count}  produced={self.produced_count}"
+                f"consumed={self.consumed_count}  produced={self.produced_count}  errors={self.error_count}"
             )
 
             # 重置计数器
             self.consumed_count = 0
             self.produced_count = 0
+            self.error_count = 0
 
     async def run_periodic_flush(self):
         """后台任务：每分钟检查一次，如果分钟变化则写入 CSV"""

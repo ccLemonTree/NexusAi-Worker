@@ -98,6 +98,11 @@ async def _handle_one(
         stats.record_consumed()
 
         result = await process_message(msg.value)
+
+        # 检查结果是否有错误
+        if result.get("error"):
+            stats.record_error()
+
         # process_message 现在总是返回结果（包括错误情况）
         await send_result(result)
 
