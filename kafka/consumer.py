@@ -92,8 +92,8 @@ async def _handle_one(
     tp = TopicPartition(msg.topic, msg.partition)
     try:
         result = await process_message(msg.value)
-        if result is not None:
-            await send_result(result)
+        # process_message 现在总是返回结果（包括错误情况）
+        await send_result(result)
         # 成功：提交该分区的下一个 offset
         await _safe_commit(consumer, tp, msg.offset + 1)
     except Exception as e:

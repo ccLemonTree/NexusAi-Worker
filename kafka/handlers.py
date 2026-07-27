@@ -462,9 +462,10 @@ async def run_vector_task(img: np.ndarray, msg: AnalyseInputMsg) -> bool:
 # 消息总处理入口
 # ---------------------------------------------------------------------------
 
-async def process_message(raw: bytes) -> Optional[dict]:
+async def process_message(raw: bytes) -> dict:
     """
-    消费一条 Kafka 消息，返回结果 dict；解析/图片加载失败时返回 None（跳过该消息）。
+    消费一条 Kafka 消息，返回结果 dict。
+    所有消息都必须有返回，错误情况通过 error 字段标识。
     """
     # 1. 解析消息
     try:
@@ -472,15 +473,41 @@ async def process_message(raw: bytes) -> Optional[dict]:
         msg = AnalyseInputMsg(**data)
     except Exception as e:
         logger.error(f"消息解析失败: {e}  raw={raw[:200]}")
-        return None
+        # 解析失败，尽力从 raw 中提取 id，无法提取则用 0
+        try:
+            raw_dict = json.loads(raw.decode("utf-8"))
+            msg_id = raw_dict.get("id", 0)
+        except:
+            msg_id = 0
+        return AnalyseResultMsg(
+            id=msg_id,
+            error=f"消息解析失败: {str(e)[:200]}",
+        ).dict()
 
     logger.info(f"Processing id={msg.id}  deviceId={msg.deviceId}  eos={msg.eos}")
 
     # 2. 加载图片
     img = await load_image(msg.path, msg.eos)
     if img is None:
-        logger.error(f"id={msg.id} 图片加载失败，跳过")
-        return None
+        logger.error(f"id={msg.id} 图片加载失败")
+        return AnalyseResultMsg(
+            id=msg.id,
+            deviceId=msg.deviceId,
+            presetId=msg.presetId,
+            eos=msg.eos,
+            path=msg.path,
+            vector=msg.vector,
+            saveLocal=msg.saveLocal,
+            questions=msg.questions,
+            labels=msg.labels,
+            deviceName=msg.deviceName,
+            channelId=msg.channelId,
+            channelName=msg.channelName,
+            channelNumber=msg.channelNumber,
+            captureTime=msg.captureTime,
+            snapshotTime=msg.snapshotTime,
+            error="图片加载失败",
+        ).dict()
 
     # 3. 并发执行三路任务
     questions_result: List[str] = []
@@ -488,6 +515,7 @@ async def process_message(raw: bytes) -> Optional[dict]:
     labels_result: List[dict] = []
     model_start = model_end = ""
     vector_ok: bool = False
+    error_msg = ""
 
     coros = []
     tags  = []
@@ -508,7 +536,9 @@ async def process_message(raw: bytes) -> Optional[dict]:
 
     for tag, result in zip(tags, gathered):
         if isinstance(result, Exception):
-            logger.error(f"id={msg.id} [{tag}] 任务异常: {result}", exc_info=True)
+            err = f"[{tag}] {str(result)[:100]}"
+            logger.error(f"id={msg.id} {err}", exc_info=True)
+            error_msg = error_msg + err + "; " if error_msg else err
             continue
         if tag == "vlm":
             questions_result, scene_start, scene_end = result
@@ -534,6 +564,7 @@ async def process_message(raw: bytes) -> Optional[dict]:
         channelNumber=msg.channelNumber,
         captureTime=msg.captureTime,
         snapshotTime=msg.snapshotTime,
+        error=error_msg,
         questionsRes=questions_result,
         vectorRes=vector_ok,
         sceneStartTime=scene_start,

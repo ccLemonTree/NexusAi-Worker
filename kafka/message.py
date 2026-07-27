@@ -97,6 +97,7 @@ class AnalyseResultMsg(BaseModel):
     channelNumber: str = ""
     captureTime: Optional[str] = None  # 统一格式 'YYYY-MM-DD HH:MM:SS'
     snapshotTime: str = ""             # 统一格式 'YYYY-MM-DD HH:MM:SS'
+    error: str = ""           # 错误信息，空字符串表示成功
     questionsRes: List[str] = []
     vectorRes: bool = False
     sceneStartTime: str = ""  # VLM 开始时间
