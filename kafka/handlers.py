@@ -203,7 +203,7 @@ async def run_vlm_tasks(
     results: List[List[dict]] = [result_dicts] * len(questions)
 
     elapsed = _time.monotonic() - t0
-    logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条  检测={len(result_dicts)}个")
+    logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条  检测={len(result_dicts)}个  DEBUG: len(raw)={len(raw)}, len(results)={len(results)}")
 
     return results, scene_start, scene_end
 
