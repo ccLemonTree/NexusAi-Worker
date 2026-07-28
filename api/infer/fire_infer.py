@@ -80,8 +80,10 @@ class fire_infer(object):
         self.model_name = model_name
         self.mode = mode
         self.base_url = base_url + "/chat/completions"
+        # VLM 优先使用 TRITON_SERVER_VLM，未配置时回退到 TRITON_SERVER
+        vlm_server = os.getenv("TRITON_SERVER_VLM") or os.getenv("TRITON_SERVER")
         self.tritonServer = triton_inference(os.path.join(os.getenv("NEXUSAI_HOME"),"api","infer","Triton_model","weights"),
-                                urls=[os.getenv("TRITON_SERVER")])
+                                urls=[vlm_server])
     def infer(self, prompt: str, question: str, file=None):
 
         # 调用推理服务
