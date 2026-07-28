@@ -80,9 +80,12 @@ class fire_infer(object):
         self.model_name = model_name
         self.mode = mode
         self.base_url = base_url + "/chat/completions"
-        # VLM 优先使用 TRITON_SERVER_VLM，未配置时回退到 TRITON_SERVER
-        vlm_server = os.getenv("TRITON_SERVER_VLM") or os.getenv("TRITON_SERVER")
+        # 普通检测模型使用 TRITON_SERVER
         self.tritonServer = triton_inference(os.path.join(os.getenv("NEXUSAI_HOME"),"api","infer","Triton_model","weights"),
+                                urls=[os.getenv("TRITON_SERVER")])
+        # VLM 大模型优先使用 TRITON_SERVER_VLM，未配置时回退到 TRITON_SERVER
+        vlm_server = os.getenv("TRITON_SERVER_VLM") or os.getenv("TRITON_SERVER")
+        self.tritonServerVLM = triton_inference(os.path.join(os.getenv("NEXUSAI_HOME"),"api","infer","Triton_model","weights"),
                                 urls=[vlm_server])
     def infer(self, prompt: str, question: str, file=None):
 
@@ -110,7 +113,7 @@ class fire_infer(object):
                 img = showimg_scale_tools(img,bounding,1.2)
             # cv2.imshow("1",img)
             # cv2.waitKey(0)
-            result_fire = self.tritonServer.run("cangqiong_0.8b", img,label_to_detect={'desc_fire': {'iou': 1, 'conf': 1}})
+            result_fire = self.tritonServerVLM.run("cangqiong_0.8b", img,label_to_detect={'desc_fire': {'iou': 1, 'conf': 1}})
             result_to_return = result_fire[0]
             analyse_desc = result_to_return.parames_vector['analyse_desc']
 
