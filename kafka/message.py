@@ -98,7 +98,7 @@ class AnalyseResultMsg(BaseModel):
     captureTime: Optional[str] = None  # 统一格式 'YYYY-MM-DD HH:MM:SS'
     snapshotTime: str = ""             # 统一格式 'YYYY-MM-DD HH:MM:SS'
     error: str = ""           # 错误信息，空字符串表示成功
-    questionsRes: List[str] = []
+    questionsRes: List[List[dict]] = []  # 每个 question 对应一组 BoundingBox.dict()
     vectorRes: bool = False
     sceneStartTime: str = ""  # VLM 开始时间
     sceneTime: str = ""       # VLM 结束时间

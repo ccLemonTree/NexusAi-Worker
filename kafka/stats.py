@@ -9,7 +9,6 @@ import os
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from collections import defaultdict
 from threading import Lock
 
 from tools.logger_tools import Kafka_Consumer_logger as logger

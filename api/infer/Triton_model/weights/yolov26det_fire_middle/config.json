@@ -1,5 +1,5 @@
 {
-    "name": "yolov26det_fire",
+    "name": "yolov26det_fire_middle",
     "platform": "onnxruntime_onnx",
     "version_policy": {
         "latest": {
@@ -47,7 +47,7 @@
     },
     "instance_group": [
         {
-            "name": "yolov26det_fire",
+            "name": "yolov26det_fire_middle",
             "kind": "KIND_GPU",
             "count": 1,
             "gpus": [
@@ -70,14 +70,14 @@
     "conf_thres": 0.5,
     "iou_thres": 0.2,
     "classes": [
-        "26_small_fire",
-        "26_small_smoke",
-	"26_small_hotwork"
+        "26_fire",
+        "26_smoke",
+	"26_hotwork"
     ],
     "classes_zh": [
-        "初筛_火",
-        "初筛_烟",
-	"初筛_动火作业"
+        "26_火",
+        "26_烟",
+	"26_动火作业"
     ],
     "show": "true"
 }

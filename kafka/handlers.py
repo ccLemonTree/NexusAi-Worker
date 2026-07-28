@@ -152,23 +152,26 @@ async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
 # VLM 推理
 # ---------------------------------------------------------------------------
 
-def _call_vlm_sync(system: str, question: str, img_bytes: bytes) -> str:
-    """在线程池中同步调用 chat_infer，避免阻塞事件循环。"""
+def _call_vlm_sync(system: str, question: str, img_bytes: bytes) -> list:
+    """在线程池中同步调用 chat_infer，避免阻塞事件循环。
+    返回 List[BoundingBox]，空列表表示无检测结果或推理失败。
+    """
     try:
-        return chat_infer.infer(system, question, file=img_bytes)
+        return chat_infer.infer(system, question, file=img_bytes) or []
     except Exception as e:
         logger.error(f"VLM 推理失败: {e}")
-        return "推理异常"
+        return []
 
 
 async def run_vlm_tasks(
     img: np.ndarray, questions: list
-) -> Tuple[List[str], str, str]:
+) -> Tuple[List[List[dict]], str, str]:
     """
     调用 VLM 推理。
     注意：chat_infer.infer() 只需要图片，忽略 system/question 参数，
     且无论 questions 有多少条，只需调用一次即可。
     返回 (结果列表, sceneStartTime, sceneTime)
+    结果列表中每个元素对应一个 question，内容是 List[BoundingBox.dict()]
     """
     import time as _time
     _, buf = cv2.imencode(".jpeg", img)
@@ -176,29 +179,31 @@ async def run_vlm_tasks(
 
     loop = asyncio.get_event_loop()
     scene_start = _now_iso()
-    t0 = _time.monotonic()  # 用于精确计时
+    t0 = _time.monotonic()
 
     # VLM 只需要图片，调用一次即可，返回结果供所有 questions 使用
     try:
-        result = await asyncio.wait_for(
+        raw = await asyncio.wait_for(
             loop.run_in_executor(executor, _call_vlm_sync, "", "", img_bytes),
             timeout=VLM_TIMEOUT,
         )
     except asyncio.TimeoutError:
         logger.error(f"VLM 推理超时（>{VLM_TIMEOUT}s）")
-        result = "推理超时"
+        raw = []
     except Exception as e:
         logger.error(f"VLM 推理异常: {e}")
-        result = "推理异常"
+        raw = []
 
     scene_end = _now_iso()
 
-    # 所有 questions 共享同一个结果
-    results = [result] * len(questions)
+    # 将 BoundingBox 列表序列化为 dict 列表
+    result_dicts: List[dict] = [b.dict() for b in raw] if raw else []
 
-    # 计算总耗时并记录（使用 monotonic 精确计时）
+    # 所有 questions 共享同一个结果
+    results: List[List[dict]] = [result_dicts] * len(questions)
+
     elapsed = _time.monotonic() - t0
-    logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条")
+    logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条  检测={len(result_dicts)}个")
 
     return results, scene_start, scene_end
 

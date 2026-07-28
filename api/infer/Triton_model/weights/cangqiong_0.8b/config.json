@@ -1,0 +1,45 @@
+{
+  "name": "cangqiong_0.8b",
+  "platform": "tensorrt_plan",
+  "max_batch_size": 1,
+  "dynamic_batching": {},
+  "input": [
+    {
+      "name": "image_bytes",
+      "data_type": "TYPE_STRING",
+      "dims": [
+        1
+      ]
+    }
+  ],
+  "output": [
+    {
+      "name": "text_output",
+      "data_type": "TYPE_STRING",
+      "dims": [
+        1
+      ]
+    }
+  ],
+  "parameters": [
+    {
+      "key": "prompt_text",
+      "value": {
+        "string_value": ""
+      }
+    }
+  ],
+  "conf_thres": 0.95,
+  "iou_thres": 0.15,
+  "model_version": [
+    1
+  ],
+  "classes": [
+    "desc_fire"
+  ],
+  "classes_zh": [
+    "火焰二次描述模型"
+  ],
+  "prompt_text":  "描述红色框里的内容，并结合周边图片信息对内容进行研判和补充。",
+  "show": "false"
+}
