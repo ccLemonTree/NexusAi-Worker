@@ -70,10 +70,16 @@ def postprocess(output_dict, origin_w, origin_h, conf_thres=0.5, label_names=[],
             continue
 
         # --- D. 坐标还原 ---
-        x1 = box[0] * origin_w
-        y1 = box[1] * origin_h
-        x2 = box[2] * origin_w
-        y2 = box[3] * origin_h
+        # 用 min/max 保证 x1<x2、y1<y2，兼容模型以任意角点顺序输出的情况
+        raw_x1 = box[0] * origin_w
+        raw_y1 = box[1] * origin_h
+        raw_x2 = box[2] * origin_w
+        raw_y2 = box[3] * origin_h
+
+        x1 = min(raw_x1, raw_x2)
+        y1 = min(raw_y1, raw_y2)
+        x2 = max(raw_x1, raw_x2)
+        y2 = max(raw_y1, raw_y2)
 
         # 边界截断
         x1 = max(0, min(x1, origin_w))
