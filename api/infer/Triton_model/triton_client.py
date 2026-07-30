@@ -118,6 +118,8 @@ class triton_inference:
             # 根据模型类型选择专用连接池
             if name == "sam3":
                 pool = self._pool_sam3
+            elif name in ("cangqiong", "fastvlm"):
+                pool = self._pool_vlm
             else:
                 pool = self._pool
 
