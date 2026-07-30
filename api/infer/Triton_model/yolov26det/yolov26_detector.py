@@ -75,6 +75,13 @@ def yolov26det(triton_client, service_name, init_data, img, label_to_detect,box_
     # input_image_buffer = np.expand_dims(input_image_buffer, axis=0)
     input_image_buffer, meta = preprocess(img, input_shape)
     input_image = input_image_buffer.astype(np.float32)
+    logger.debug(
+        f"[yolov26det] {service_name} input tensor: "
+        f"shape={input_image.shape} "
+        f"mean={float(input_image.mean()):.4f} "
+        f"max={float(input_image.max()):.4f} "
+        f"min={float(input_image.min()):.4f}"
+    )
     inputs[0].set_data_from_numpy(input_image)
 
     pretreatment_end = time.time()  # 时间测试
