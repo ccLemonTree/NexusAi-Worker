@@ -203,7 +203,7 @@ async def run_vlm_tasks(
     results: List[List[dict]] = [result_dicts] * len(questions)
 
     elapsed = _time.monotonic() - t0
-    logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条  检测={len(result_dicts)}个  DEBUG: len(raw)={len(raw)}, len(results)={len(results)}")
+    logger.info(f"VLM 推理完成 耗时={elapsed:.3f}s  questions={len(questions)}条  检测={len(result_dicts)}个")
 
     return results, scene_start, scene_end
 
@@ -515,7 +515,7 @@ async def process_message(raw: bytes) -> dict:
         ).dict()
 
     # 3. 并发执行三路任务
-    questions_result: List[str] = []
+    questions_result: List[List[dict]] = []
     scene_start = scene_end = ""
     labels_result: List[dict] = []
     model_start = model_end = ""

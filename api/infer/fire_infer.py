@@ -107,13 +107,12 @@ class fire_infer(object):
         result = self.tritonServer.run("yolov26det_fire", img,
                                        label_to_detect={'26_small_smoke': {'iou': 0.2, 'conf': 0.2},
                                                         '26_small_fire': {'iou': 0.2, 'conf': 0.2}})
-        print(result)
         if len(result) != 0:
             for bounding in result:
                 img = showimg_scale_tools(img,bounding,1.2)
-            # cv2.imshow("1",img)
-            # cv2.waitKey(0)
             result_fire = self.tritonServerVLM.run("cangqiong_0.8b", img,label_to_detect={'desc_fire': {'iou': 1, 'conf': 1}})
+            if not result_fire:
+                return []
             result_to_return = result_fire[0]
             analyse_desc = result_to_return.parames_vector['analyse_desc']
 
