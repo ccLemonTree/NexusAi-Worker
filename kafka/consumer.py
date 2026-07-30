@@ -17,7 +17,7 @@ from aiokafka.structs import TopicPartition
 
 from kafka.handlers import process_message
 from kafka.producer import send_result, stop_producer
-from kafka.stats import get_stats_collector, start_stats_task
+from kafka.stats import get_stats_collector, start_stats_task, is_stats_enabled
 from tools.logger_tools import Kafka_Consumer_logger as logger
 
 KAFKA_BOOTSTRAP     = os.getenv("KAFKA_BOOTSTRAP",      "192.168.1.115:9092")
@@ -91,16 +91,18 @@ async def _handle_one(
 ) -> None:
     """处理单条消息：推理 → 发送结果 → commit offset。"""
     tp = TopicPartition(msg.topic, msg.partition)
-    stats = get_stats_collector()
+    _stats_enabled = is_stats_enabled()
+    stats = get_stats_collector() if _stats_enabled else None
 
     try:
         # 记录消费
-        stats.record_consumed()
+        if stats:
+            stats.record_consumed()
 
         result = await process_message(msg.value)
 
         # 检查结果是否有错误
-        if result.get("error"):
+        if stats and result.get("error"):
             stats.record_error()
 
         # process_message 现在总是返回结果（包括错误情况）
@@ -117,7 +119,8 @@ async def _handle_one(
         await _safe_commit(consumer, tp, msg.offset + 1)
     finally:
         # 无论成功失败都统计生产（记录的是"尝试处理"的消息数）
-        stats.record_produced()
+        if stats:
+            stats.record_produced()
         semaphore.release()
 
 

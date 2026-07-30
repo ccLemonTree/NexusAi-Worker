@@ -126,8 +126,17 @@ def get_stats_collector() -> KafkaStatsCollector:
     return _stats_collector
 
 
+def is_stats_enabled() -> bool:
+    """KAFKA_STATS_ENABLED=false 时禁用统计，默认启用"""
+    return os.getenv("KAFKA_STATS_ENABLED", "true").lower() not in ("false", "0", "no")
+
+
 def start_stats_task():
-    """启动统计后台任务（在主事件循环中调用）"""
+    """启动统计后台任务（在主事件循环中调用）。
+    KAFKA_STATS_ENABLED=false 时跳过。"""
+    if not is_stats_enabled():
+        logger.info("统计模块已禁用（KAFKA_STATS_ENABLED=false）")
+        return
     collector = get_stats_collector()
     asyncio.create_task(collector.run_periodic_flush())
     logger.info("统计后台任务已启动")
