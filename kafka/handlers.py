@@ -549,6 +549,13 @@ async def process_message(raw: bytes) -> dict:
             questions_result, scene_start, scene_end = result
         elif tag == "model":
             labels_result, model_start, model_end = result
+            for r in labels_result:
+                if r.get("bbox"):
+                    logger.info(
+                        f"id={msg.id} 小模型检测到目标  "
+                        f"alarmTypeId={r['alarmTypeId']}  "
+                        f"bbox={r['bbox']}"
+                    )
         elif tag == "vector":
             vector_ok = bool(result)  # True=至少入库一条，False=无目标或异常
 
