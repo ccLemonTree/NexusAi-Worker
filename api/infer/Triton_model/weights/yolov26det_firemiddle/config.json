@@ -1,5 +1,5 @@
 {
-    "name": "yolov26det_fire_middle",
+    "name": "yolov26det_firemiddle",
     "platform": "onnxruntime_onnx",
     "version_policy": {
         "latest": {
