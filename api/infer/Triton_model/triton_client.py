@@ -115,29 +115,17 @@ class triton_inference:
         try:
             name = service_name.split("_")[0]
 
-            # sam3 使用专用连接池（TRITON_SERVER_SAM3）
+            # 根据模型类型选择专用连接池
             if name == "sam3":
-                with self._pool_sam3.borrow() as client:
-                    if client is None:
-                        return []
-                    result_to_return, _ = self.model_class.get(name, "none")(
-                        client, service_name, self.init_data, img, label_to_detect, box_info=box_info)
-                return result_to_return
+                pool = self._pool_sam3
+            else:
+                pool = self._pool
 
-            # 其他模型创建独立客户端（TRITON_SERVER）
-            client = grpcclient.InferenceServerClient(
-                url=os.getenv("TRITON_SERVER", "localhost:8001"),
-                channel_args=[
-                    ("grpc.max_receive_message_length", 64 * 1024 * 1024),
-                    ("grpc.max_send_message_length", 64 * 1024 * 1024),
-                ]
-            )
-
-            try:
-                result_to_return, time_client_json = self.model_class.get(name, "none")(
+            with pool.borrow() as client:
+                if client is None:
+                    return []
+                result_to_return, _ = self.model_class.get(name, "none")(
                     client, service_name, self.init_data, img, label_to_detect, box_info=box_info)
-            finally:
-                client.close()
 
             return result_to_return
         except Exception as e:
