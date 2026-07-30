@@ -88,7 +88,17 @@ def yolov26det(triton_client, service_name, init_data, img, label_to_detect,box_
         for output in OUTPUT_DATA:
             results.as_numpy(output["name"])
         for obj in OUTPUT_DATA:
-            output_data.append(results.as_numpy(obj["name"]))
+            arr = results.as_numpy(obj["name"])
+            output_data.append(arr)
+            # 原始输出快照：帮助判断Triton返回值是否异常
+            if len(arr.shape) == 3:
+                scores_col = arr[0, :, 4]  # [1,300,6] 第4列 = score
+                logger.debug(
+                    f"[yolov26det] {service_name} raw output shape={arr.shape} "
+                    f"score_col max={float(scores_col.max()):.4f} "
+                    f"mean={float(scores_col.mean()):.4f} "
+                    f"nonzero={int((scores_col > 0).sum())}"
+                )
     else:
         logger.warning(f"[yolov26det] 模型未就绪，跳过推理: service={service_name!r} model_version={model_version!r}")
 
