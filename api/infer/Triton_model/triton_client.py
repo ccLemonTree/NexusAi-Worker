@@ -14,7 +14,7 @@ from api.infer.Triton_model.sam3.sam3_detector import sam3
 from api.infer.Triton_model.yolov11det.yolov11_detector import yolov11det
 from api.infer.Triton_model.yolov11cls.yolov11cls_detector import yolov11cls
 from api.infer.Triton_model.fastvlm.fastvlm_detector import fastvlm_detector
-from tools.concurrency import get_triton_pool, get_triton_pool_vlm
+from tools.concurrency import get_triton_pool, get_triton_pool_vlm, get_triton_pool_sam3
 from api.infer.Triton_model.yolov26det.yolov26_detector import yolov26det
 from api.infer.Triton_model.cangqiong.cangqiong import cangqiong_detector
 def none(a,b,c,d,e, box_info=""):
@@ -26,9 +26,10 @@ class triton_inference:
         self.config_dir = config_dir
         self.init_data = self.initialize(self.config_dir)
         self.service_scheduling = {}
-        self.urls = urls
+        self. urls = urls
         self._pool = get_triton_pool()
         self._pool_vlm = get_triton_pool_vlm()          # 大模型(fastvlm等) 专用池
+        self._pool_sam3 = get_triton_pool_sam3()        # SAM3 专用池
         self.model_class = {
             "yolov5": yolov5,
             "retina": retina,
@@ -114,9 +115,18 @@ class triton_inference:
         try:
             name = service_name.split("_")[0]
 
-            # 创建独立的客户端而不是使用连接池（避免锁竞争）
+            # sam3 使用专用连接池（TRITON_SERVER_SAM3）
+            if name == "sam3":
+                with self._pool_sam3.borrow() as client:
+                    if client is None:
+                        return []
+                    result_to_return, _ = self.model_class.get(name, "none")(
+                        client, service_name, self.init_data, img, label_to_detect, box_info=box_info)
+                return result_to_return
+
+            # 其他模型创建独立客户端（TRITON_SERVER）
             client = grpcclient.InferenceServerClient(
-                url=self._pool._url if hasattr(self._pool, '_url') else os.getenv("TRITON_SERVER", "localhost:8001"),
+                url=os.getenv("TRITON_SERVER", "localhost:8001"),
                 channel_args=[
                     ("grpc.max_receive_message_length", 64 * 1024 * 1024),
                     ("grpc.max_send_message_length", 64 * 1024 * 1024),

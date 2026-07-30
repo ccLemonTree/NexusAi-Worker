@@ -126,6 +126,7 @@ class TritonClientPool:
 
 _triton_pool: TritonClientPool | None = None
 _triton_pool_vlm: TritonClientPool | None = None
+_triton_pool_sam3: TritonClientPool | None = None
 
 
 def get_triton_pool() -> TritonClientPool:
@@ -145,3 +146,13 @@ def get_triton_pool_vlm() -> TritonClientPool:
         url = os.getenv("TRITON_SERVER_VLM") or os.getenv("TRITON_SERVER", "localhost:8001")
         _triton_pool_vlm = TritonClientPool(url=url)
     return _triton_pool_vlm
+
+
+def get_triton_pool_sam3() -> TritonClientPool:
+    """SAM3 模型专用连接池，指向独立的 Triton SAM3 部署。
+    若未配置 TRITON_SERVER_SAM3，退回到 TRITON_SERVER（向后兼容）。"""
+    global _triton_pool_sam3
+    if _triton_pool_sam3 is None:
+        url = os.getenv("TRITON_SERVER_SAM3") or os.getenv("TRITON_SERVER", "localhost:8001")
+        _triton_pool_sam3 = TritonClientPool(url=url)
+    return _triton_pool_sam3
