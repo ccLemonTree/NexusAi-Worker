@@ -140,19 +140,23 @@ def get_triton_pool() -> TritonClientPool:
 
 def get_triton_pool_vlm() -> TritonClientPool:
     """大模型（fastvlm 等）专用连接池，指向独立的 Triton VLM 部署。
-    若未配置 TRITON_SERVER_VLM，退回到 TRITON_SERVER（向后兼容）。"""
+    若未配置 TRITON_SERVER_VLM，退回到 TRITON_SERVER（向后兼容）。
+    池大小由 TRITON_VLM_POOL_SIZE 控制（默认 40），独立于普通池的 TRITON_POOL_SIZE。"""
     global _triton_pool_vlm
     if _triton_pool_vlm is None:
         url = os.getenv("TRITON_SERVER_VLM") or os.getenv("TRITON_SERVER", "localhost:8001")
-        _triton_pool_vlm = TritonClientPool(url=url)
+        pool_size = int(os.getenv("TRITON_VLM_POOL_SIZE", "40"))
+        _triton_pool_vlm = TritonClientPool(url=url, pool_size=pool_size)
     return _triton_pool_vlm
 
 
 def get_triton_pool_sam3() -> TritonClientPool:
     """SAM3 模型专用连接池，指向独立的 Triton SAM3 部署。
-    若未配置 TRITON_SERVER_SAM3，退回到 TRITON_SERVER（向后兼容）。"""
+    若未配置 TRITON_SERVER_SAM3，退回到 TRITON_SERVER（向后兼容）。
+    池大小由 TRITON_SAM3_POOL_SIZE 控制（默认 20）。"""
     global _triton_pool_sam3
     if _triton_pool_sam3 is None:
         url = os.getenv("TRITON_SERVER_SAM3") or os.getenv("TRITON_SERVER", "localhost:8001")
-        _triton_pool_sam3 = TritonClientPool(url=url)
+        pool_size = int(os.getenv("TRITON_SAM3_POOL_SIZE", "20"))
+        _triton_pool_sam3 = TritonClientPool(url=url, pool_size=pool_size)
     return _triton_pool_sam3
