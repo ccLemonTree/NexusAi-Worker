@@ -198,7 +198,7 @@ class fire_infer(object):
         else:
             return []
 
-        # fastvlm_fire 是全图分类模型，无空间坐标，用全图占位框满足 List[BoundingBox] 接口
-        box = BoundingBox(0, 1.0, 0, img_w, 0, img_h, img_w, img_h,
+        # fastvlm_fire 是全图分类模型，无空间坐标，用左上角 1×1 点占位满足 List[BoundingBox] 接口
+        box = BoundingBox(0, 1.0, 0, 1, 0, 1, img_w, img_h,
                           classname, parames_vector={"desc": label_str})
         return [box]
