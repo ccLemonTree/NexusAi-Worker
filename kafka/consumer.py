@@ -146,10 +146,6 @@ async def run_consumer() -> None:
         KAFKA_INPUT_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP,
         group_id=KAFKA_GROUP_ID,
-        # 静态成员身份（KIP-345）：重启时 broker 不立即触发 rebalance，
-        # 避免多 worker 同时重启引发的 rebalance 风暴和 UnknownMemberIdError 连锁反应。
-        # 每个 pod 的 HOSTNAME 唯一（nexusai-kafka-worker1 等），保证 instance_id 不冲突。
-        group_instance_id=os.getenv("HOSTNAME"),
         enable_auto_commit=False,
         auto_offset_reset="latest",
         max_poll_records=MAX_CONCURRENT,
