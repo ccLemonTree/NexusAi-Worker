@@ -67,11 +67,12 @@ async def send_result(result: dict) -> None:
     msg_id = result.get("id")
     try:
         producer = await get_producer()
-        key = str(msg_id).encode("utf-8") if msg_id is not None else None
+        # msg_id 是每条消息的唯一 ID，无顺序依赖，不指定 key 让 Kafka round-robin 均匀分配
+        # 避免 key-based hash 不均导致分区负载倾斜
         # 加超时：结果 topic 不存在或元数据异常时 send_and_wait 会长时间阻塞，
         # 导致 _handle_one 卡住不释放并发槽，进而 poll 停摆、消费者被踢出组。
         await asyncio.wait_for(
-            producer.send_and_wait(topic, result, key=key),
+            producer.send_and_wait(topic, result, key=None),
             timeout=send_timeout,
         )
         # 记录成功发送（info 级别，方便统计）
