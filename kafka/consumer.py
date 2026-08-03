@@ -175,9 +175,13 @@ async def run_consumer() -> None:
         )
         raise
 
+    # 输出分区分配情况，用于诊断负载不均衡
+    assigned_partitions = consumer.assignment()
+    partition_ids = sorted([tp.partition for tp in assigned_partitions])
     logger.info(
         f"Kafka consumer started | topic={KAFKA_INPUT_TOPIC} | "
-        f"group={KAFKA_GROUP_ID} | max_concurrent={MAX_CONCURRENT}"
+        f"group={KAFKA_GROUP_ID} | max_concurrent={MAX_CONCURRENT} | "
+        f"assigned_partitions={partition_ids} (total={len(partition_ids)})"
     )
 
     try:
