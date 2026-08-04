@@ -4,9 +4,11 @@ import asyncio
 import logging
 import os
 import signal
-from typing import Set
+from collections import defaultdict
+from typing import Callable, Set
 
 from aiokafka import AIOKafkaConsumer
+from aiokafka.abc import ConsumerRebalanceListener
 from aiokafka.errors import (
     CommitFailedError,
     IllegalGenerationError,
@@ -17,6 +19,7 @@ from aiokafka.structs import TopicPartition
 
 from kafka.handlers import process_message
 from kafka.producer import send_result, stop_producer
+from kafka.rebalance import RebalanceEpoch, drain_tasks, skip_startup_backlog
 from kafka.stats import get_stats_collector, start_stats_task, is_stats_enabled
 from tools.logger_tools import Kafka_Consumer_logger as logger
 
@@ -25,6 +28,18 @@ KAFKA_INPUT_TOPIC   = os.getenv("KAFKA_INPUT_TOPIC",    "model_analyse")
 KAFKA_RESULT_TOPIC  = os.getenv("KAFKA_RESULT_TOPIC",   "model_analyse_result")
 KAFKA_GROUP_ID      = os.getenv("KAFKA_CONSUMER_GROUP", "nexusai-model-worker")
 MAX_CONCURRENT      = int(os.getenv("KAFKA_MAX_CONCURRENT", "16"))
+REBALANCE_DRAIN_TIMEOUT = float(os.getenv("KAFKA_REBALANCE_DRAIN_TIMEOUT", "30"))
+SHUTDOWN_DRAIN_TIMEOUT = float(os.getenv("KAFKA_SHUTDOWN_DRAIN_TIMEOUT", "90"))
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+SKIP_BACKLOG_ON_START = _env_bool("KAFKA_SKIP_BACKLOG_ON_START", True)
 
 
 def _sasl_kwargs() -> dict:
@@ -60,7 +75,13 @@ def _register_signals() -> None:
         signal.signal(signal.SIGINT, lambda _s, _f: _shutdown_event.set())
 
 
-async def _safe_commit(consumer: AIOKafkaConsumer, tp: TopicPartition, offset: int) -> None:
+async def _safe_commit(
+    consumer: AIOKafkaConsumer,
+    tp: TopicPartition,
+    offset: int,
+    task_epoch: int,
+    rebalance_state: RebalanceEpoch,
+) -> None:
     """
     提交 offset，容忍 rebalance 导致的各种失效场景：
     - 分区已不在本消费者的 assignment 中（IllegalStateError）
@@ -69,7 +90,14 @@ async def _safe_commit(consumer: AIOKafkaConsumer, tp: TopicPartition, offset: i
     这些都是多消费者 rebalance 的正常现象：该 offset 会由新 owner 重新消费。
     统一降级为 warning，不刷错误堆栈。
     """
-    # 提交前先校验分区归属，能挡掉大部分无谓提交
+    # rebalance 一开始就让旧任务失效，避免它们使用过期 generation 提交。
+    if not rebalance_state.can_commit(task_epoch):
+        logger.warning(
+            f"跳过 commit：任务属于旧 assignment，partition={tp.partition} offset={offset}"
+        )
+        return
+
+    # 提交前再校验分区归属，挡掉 assignment 已更新但回调尚未完成的竞态。
     if tp not in consumer.assignment():
         logger.warning(f"跳过 commit：分区 {tp} 已不属于本消费者（rebalance），offset={offset}")
         return
@@ -87,7 +115,8 @@ async def _handle_one(
     msg,
     consumer: AIOKafkaConsumer,
     semaphore: asyncio.Semaphore,
-    pending: Set[asyncio.Task],
+    task_epoch: int,
+    rebalance_state: RebalanceEpoch,
 ) -> None:
     """处理单条消息：推理 → 发送结果 → commit offset。"""
     tp = TopicPartition(msg.topic, msg.partition)
@@ -109,19 +138,106 @@ async def _handle_one(
         await send_result(result)
 
         # 成功：提交该分区的下一个 offset
-        await _safe_commit(consumer, tp, msg.offset + 1)
+        await _safe_commit(
+            consumer, tp, msg.offset + 1, task_epoch, rebalance_state
+        )
     except Exception as e:
         logger.error(
             f"消息处理失败 topic={msg.topic} partition={msg.partition} offset={msg.offset}: {e}",
             exc_info=True,
         )
         # 失败：仍然 commit，跳过毒丸消息，防止队列卡死
-        await _safe_commit(consumer, tp, msg.offset + 1)
+        await _safe_commit(
+            consumer, tp, msg.offset + 1, task_epoch, rebalance_state
+        )
     finally:
         # 无论成功失败都统计生产（记录的是"尝试处理"的消息数）
         if stats:
             stats.record_produced()
         semaphore.release()
+
+
+class WorkerRebalanceListener(ConsumerRebalanceListener):
+    """Invalidate stale work before revoke and initialize a new assignment."""
+
+    def __init__(
+        self,
+        consumer: AIOKafkaConsumer,
+        rebalance_state: RebalanceEpoch,
+        tasks_for_partitions: Callable[[set[TopicPartition]], Set[asyncio.Task]],
+    ) -> None:
+        self.consumer = consumer
+        self.rebalance_state = rebalance_state
+        self.tasks_for_partitions = tasks_for_partitions
+        self._assignment_lock = asyncio.Lock()
+
+    async def on_partitions_revoked(self, revoked: set[TopicPartition]) -> None:
+        epoch = self.rebalance_state.begin_rebalance()
+        tasks = self.tasks_for_partitions(revoked)
+        logger.info(
+            f"Kafka partitions revoked | epoch={epoch} | "
+            f"partitions={sorted(tp.partition for tp in revoked)} | "
+            f"in_flight={len(tasks)}"
+        )
+        _, pending = await drain_tasks(
+            tasks, timeout_seconds=REBALANCE_DRAIN_TIMEOUT
+        )
+        if pending:
+            logger.warning(
+                f"Rebalance drain 超时（{REBALANCE_DRAIN_TIMEOUT}s），"
+                f"保留 {len(pending)} 个任务继续执行但禁止其 commit"
+            )
+
+    async def on_partitions_assigned(self, assigned: set[TopicPartition]) -> None:
+        async with self._assignment_lock:
+            try:
+                offsets = await skip_startup_backlog(
+                    self.consumer,
+                    assigned,
+                    self.rebalance_state,
+                    enabled=SKIP_BACKLOG_ON_START,
+                )
+            except Exception as error:
+                # aiokafka 会吞掉 listener 异常。保持 rebalancing 状态，主循环重试，
+                # 防止首次定位尚未成功时开始拉取消息。
+                logger.warning(f"首次定位 Kafka 最新 offset 失败，将重试: {error}")
+                return
+
+            if self.rebalance_state.startup_skip_pending:
+                return
+            self._finish_assignment(assigned, offsets)
+
+    def _finish_assignment(
+        self, assigned: set[TopicPartition], offsets: dict[TopicPartition, int]
+    ) -> None:
+        self.rebalance_state.finish_assignment()
+        startup_offsets = {tp.partition: offset for tp, offset in offsets.items()}
+        logger.info(
+            f"Kafka partitions assigned | "
+            f"partitions={sorted(tp.partition for tp in assigned)} | "
+            f"startup_offsets={startup_offsets}"
+        )
+
+    async def retry_startup_assignment(self) -> bool:
+        """Retry initialization if aiokafka swallowed an assignment error."""
+        async with self._assignment_lock:
+            assigned = self.consumer.assignment()
+            if not assigned or not self.rebalance_state.startup_skip_pending:
+                return False
+            try:
+                offsets = await skip_startup_backlog(
+                    self.consumer,
+                    assigned,
+                    self.rebalance_state,
+                    enabled=SKIP_BACKLOG_ON_START,
+                )
+            except Exception as error:
+                logger.warning(f"首次定位 Kafka 最新 offset 重试失败: {error}")
+                return False
+            if self.rebalance_state.startup_skip_pending:
+                return False
+            self._finish_assignment(assigned, offsets)
+            return True
 
 
 async def run_consumer() -> None:
@@ -138,12 +254,13 @@ async def run_consumer() -> None:
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
     pending: Set[asyncio.Task] = set()
+    pending_by_partition: dict[TopicPartition, Set[asyncio.Task]] = defaultdict(set)
+    rebalance_state = RebalanceEpoch()
 
     sasl = _sasl_kwargs()
     logger.info(f"Kafka SASL: {'enabled  mechanism=' + sasl['sasl_mechanism'] if sasl else 'disabled'}")
 
     consumer = AIOKafkaConsumer(
-        KAFKA_INPUT_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP,
         group_id=KAFKA_GROUP_ID,
         enable_auto_commit=False,
@@ -160,6 +277,19 @@ async def run_consumer() -> None:
         request_timeout_ms=int(os.getenv("KAFKA_REQUEST_TIMEOUT_MS", "120000")),
         **sasl,
     )
+
+    def tasks_for_partitions(partitions: set[TopicPartition]) -> Set[asyncio.Task]:
+        return {
+            task
+            for partition in partitions
+            for task in pending_by_partition.get(partition, set())
+            if not task.done()
+        }
+
+    listener = WorkerRebalanceListener(
+        consumer, rebalance_state, tasks_for_partitions
+    )
+    consumer.subscribe([KAFKA_INPUT_TOPIC], listener=listener)
 
     # 启动超时保护：避免 JoinGroup/Rebalance 时无限期卡住
     startup_timeout = int(os.getenv("KAFKA_STARTUP_TIMEOUT", "180"))  # 默认 3 分钟
@@ -185,26 +315,81 @@ async def run_consumer() -> None:
     )
 
     try:
-        async for msg in consumer:
-            if _shutdown_event.is_set():
-                logger.info("Shutdown signal received, stopping consumer loop")
-                break
+        while not _shutdown_event.is_set():
+            if rebalance_state.rebalancing:
+                if rebalance_state.startup_skip_pending:
+                    await listener.retry_startup_assignment()
+                await asyncio.sleep(0.1)
+                continue
 
-            # 占用一个并发槽，超出上限时此处会等待直到有槽位释放
-            await semaphore.acquire()
-
-            task = asyncio.create_task(
-                _handle_one(msg, consumer, semaphore, pending),
-                name=f"msg-{msg.offset}",
+            batches = await consumer.getmany(
+                timeout_ms=1000, max_records=MAX_CONCURRENT
             )
-            pending.add(task)
-            task.add_done_callback(pending.discard)
+            for tp, messages in batches.items():
+                for msg in messages:
+                    if _shutdown_event.is_set() or rebalance_state.rebalancing:
+                        break
+
+                    # 占用一个并发槽，超出上限时等待；等待期间可能发生 rebalance。
+                    acquired = False
+                    while (
+                        not _shutdown_event.is_set()
+                        and not rebalance_state.rebalancing
+                    ):
+                        try:
+                            await asyncio.wait_for(semaphore.acquire(), timeout=0.5)
+                            acquired = True
+                            break
+                        except asyncio.TimeoutError:
+                            continue
+                    if _shutdown_event.is_set() or rebalance_state.rebalancing:
+                        if acquired:
+                            semaphore.release()
+                        break
+
+                    task_epoch = rebalance_state.capture()
+                    task = asyncio.create_task(
+                        _handle_one(
+                            msg,
+                            consumer,
+                            semaphore,
+                            task_epoch,
+                            rebalance_state,
+                        ),
+                        name=f"msg-{msg.partition}-{msg.offset}",
+                    )
+                    pending.add(task)
+                    pending_by_partition[tp].add(task)
+
+                    def remove_task(
+                        completed: asyncio.Task, partition: TopicPartition = tp
+                    ) -> None:
+                        pending.discard(completed)
+                        partition_tasks = pending_by_partition.get(partition)
+                        if partition_tasks is not None:
+                            partition_tasks.discard(completed)
+                            if not partition_tasks:
+                                pending_by_partition.pop(partition, None)
+
+                    task.add_done_callback(remove_task)
+
+        logger.info("Shutdown signal received, stopping consumer loop")
 
     finally:
-        # 等待所有 in-flight 任务完成，保证优雅退出
+        # 等待所有 in-flight 任务；超过上限时取消，未提交消息由 Kafka 接管。
         if pending:
             logger.info(f"Waiting for {len(pending)} in-flight tasks to finish...")
-            await asyncio.gather(*pending, return_exceptions=True)
+            _, unfinished = await drain_tasks(
+                pending, timeout_seconds=SHUTDOWN_DRAIN_TIMEOUT
+            )
+            if unfinished:
+                logger.warning(
+                    f"Shutdown drain 超时（{SHUTDOWN_DRAIN_TIMEOUT}s），"
+                    f"取消 {len(unfinished)} 个未完成任务"
+                )
+                for task in unfinished:
+                    task.cancel()
+                await asyncio.gather(*unfinished, return_exceptions=True)
 
         await consumer.stop()
         await stop_producer()
