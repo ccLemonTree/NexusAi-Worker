@@ -28,6 +28,8 @@ x-triton-base: &triton-base
 x-inference-env: &inference-env
   WORKER_MAX_CONCURRENT: "${WORKER_MAX_CONCURRENT:-16}"
   WORKER_AUTH_TOKEN: "${WORKER_AUTH_TOKEN:?WORKER_AUTH_TOKEN is required}"
+  WORKER_DRAIN_DELAY: "${WORKER_DRAIN_DELAY:-5}"
+  WORKER_SHUTDOWN_TIMEOUT: "${WORKER_SHUTDOWN_TIMEOUT:-90}"
   TRITON_MAX_WORKERS: "32"
   LOGIC_MAX_WORKERS: "32"
   IO_MAX_WORKERS: "8"
@@ -66,7 +68,7 @@ x-worker-base: &worker-base
   environment:
     <<: *inference-env
   healthcheck:
-    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=2)"]
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/ready', timeout=2)"]
     interval: 10s
     start_period: 60s
     timeout: 3s
