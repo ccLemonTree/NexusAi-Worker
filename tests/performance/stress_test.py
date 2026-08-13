@@ -3,8 +3,8 @@
 压力测试脚本：测试 Triton 推理吞吐量
 
 使用方法：
-    python stress_test.py --image test.jpg --duration 10 --concurrent 16
-    python stress_test.py --image test.jpg --count 100 --concurrent 8
+    python tests/performance/stress_test.py --image test.jpg --duration 10 --concurrent 16
+    python tests/performance/stress_test.py --image test.jpg --count 100 --concurrent 8
 
 测试场景：
     1. 测试所有 5 个标签（Smoking-handsmoking, 26_smoke, Hot-work, 26_fire + VLM）
@@ -15,15 +15,16 @@ import asyncio
 import json
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Any
 import sys
 import os
 
 # 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from kafka.message import AnalyseInputMsg, LabelEntry, QuestionEntry
-from kafka.handlers import process_message
+from inference.message import AnalyseInputMsg, LabelEntry, QuestionEntry
+from inference.handler import process_message
 import cv2
 import numpy as np
 import json

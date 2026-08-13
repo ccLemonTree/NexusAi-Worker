@@ -2,16 +2,15 @@
 
 ## 项目结构与模块组织
 
-`kafka_main.py` 是工作进程入口。Kafka 消息处理位于 `kafka/`；配置、日志、HTTP 和并发工具集中在 `tools/` 与 `utils/`。推理编排位于 `api/infer/`，其中 `Model_pipline/` 存放模型流水线，`Triton_model/` 存放 Triton 客户端及后处理逻辑。其他 API 按功能放在 `api/` 对应子目录。性能与集成诊断脚本位于 `tests/performance/`，示例图片位于 `example/`。
+`worker_main.py` 是无状态推理服务入口，HTTP 请求处理位于 `inference/`；配置、日志、HTTP 和并发工具集中在 `tools/` 与 `utils/`。推理编排位于 `api/infer/`，其中 `Model_pipline/` 存放模型流水线，`Triton_model/` 存放 Triton 客户端及后处理逻辑。Kafka 消费和结果调度属于独立的 `NexusAi-Dispatcher` 项目，不得重新放入本仓库。性能与集成诊断脚本位于 `tests/performance/`，示例图片位于 `example/`。
 
 ## 构建、测试与开发命令
 
 - `python -m venv .venv`：创建本地虚拟环境。
 - `python -m pip install -r requirements.txt`：安装锁定版本的运行时依赖。
-- `python kafka_main.py`：使用 `.env` 或注入的环境变量启动工作进程；运行前须确保 Kafka、Triton、Milvus 和对象存储可访问。
-- `python -m compileall kafka api tools utils`：快速检查 Python 语法。
-- `python tests/performance/test_e2e.py --help`：查看端到端诊断脚本参数。
-- `docker build -t nexusai-worker .`：构建 Python 3.12 工作进程镜像。
+- `python worker_main.py`：使用 `.env` 或注入的环境变量启动推理服务；运行前须确保 Triton、Milvus 和对象存储可访问。
+- `python -m compileall inference api tools utils`：快速检查 Python 语法。
+- `docker build -t nexusai-inference .`：构建 Python 3.12 推理服务镜像。
 - `docker compose -f docker-compose-stats.yml config`：部署前校验 Compose 配置及变量替换。
 
 ## 编码风格与命名约定

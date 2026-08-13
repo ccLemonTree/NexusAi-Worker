@@ -19,9 +19,8 @@
 ### 1. 准备测试环境
 
 ```bash
-# 登录正式环境服务器
-ssh root@36.140.131.182
-# 密码: w3X)yJ!G6p
+# 登录测试环境服务器（地址和凭据由部署平台提供）
+ssh <user>@<server>
 
 # 准备测试图片（使用任意一张图片）
 # 例如从容器挂载路径复制一张
@@ -36,10 +35,10 @@ cp /ai/capture/back/search_pic/xxx.jpg /tmp/test.jpg
 
 ```bash
 # 测试所有 5 个标签（含 VLM）
-python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels all
+python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels all
 
 # 仅测试 4 个小模型标签（排除 VLM）
-python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels small
+python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels small
 ```
 
 #### 方式 2: 固定次数测试
@@ -48,26 +47,26 @@ python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labe
 
 ```bash
 # 测试所有 5 个标签
-python stress_test.py --image /tmp/test.jpg --count 100 --concurrent 16 --labels all
+python tests/performance/stress_test.py --image /tmp/test.jpg --count 100 --concurrent 16 --labels all
 
 # 仅测试小模型
-python stress_test.py --image /tmp/test.jpg --count 100 --concurrent 16 --labels small
+python tests/performance/stress_test.py --image /tmp/test.jpg --count 100 --concurrent 16 --labels small
 ```
 
 ### 3. 调整并发数测试
 
 ```bash
 # 低并发（4 并发）
-python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 4 --labels small
+python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 4 --labels small
 
 # 中并发（8 并发）
-python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 8 --labels small
+python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 8 --labels small
 
-# 高并发（16 并发，当前 Kafka 配置）
-python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels small
+# 高并发（16 并发，当前推理 Worker 配置）
+python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels small
 
 # 更高并发（32 并发，用于测试极限）
-python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 32 --labels small
+python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 32 --labels small
 ```
 
 ## 输出示例
@@ -138,7 +137,7 @@ python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 32 --labe
 
 ```bash
 # 快速测试 10 秒
-python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels small
+python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels small
 ```
 
 **预期结果**：
@@ -149,7 +148,7 @@ python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labe
 ### 2. 再测试包含 VLM
 
 ```bash
-python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels all
+python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labels all
 ```
 
 **预期结果**：
@@ -162,7 +161,7 @@ python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent 16 --labe
 # 测试 4, 8, 16, 32 并发
 for c in 4 8 16 32; do
     echo "测试并发数: $c"
-    python stress_test.py --image /tmp/test.jpg --duration 10 --concurrent $c --labels small
+    python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10 --concurrent $c --labels small
 done
 ```
 
@@ -174,7 +173,7 @@ done
 
 ```bash
 # 1. 将脚本复制到容器
-docker cp stress_test.py <container_id>:/app/
+docker cp tests/performance/stress_test.py <container_id>:/app/tests/performance/stress_test.py
 
 # 2. 进入容器
 docker exec -it <container_id> bash
@@ -184,7 +183,7 @@ ls /ai/capture/back/search_pic/*.jpg | head -1
 # 复制路径，例如: /ai/capture/back/search_pic/D1783502816221/xxx.jpg
 
 # 4. 运行测试
-python stress_test.py --image <图片路径> --duration 10 --concurrent 16 --labels small
+python tests/performance/stress_test.py --image <图片路径> --duration 10 --concurrent 16 --labels small
 ```
 
 ## 故障排查
@@ -192,14 +191,14 @@ python stress_test.py --image <图片路径> --duration 10 --concurrent 16 --lab
 ### 问题 1: 导入错误
 
 ```
-ModuleNotFoundError: No module named 'kafka'
+ModuleNotFoundError: No module named 'inference'
 ```
 
 **解决方案**: 确保在项目根目录运行，或设置 PYTHONPATH：
 
 ```bash
 export PYTHONPATH=/app:$PYTHONPATH
-python stress_test.py --image test.jpg --duration 10
+python tests/performance/stress_test.py --image test.jpg --duration 10
 ```
 
 ### 问题 2: 图片不存在
@@ -212,7 +211,7 @@ python stress_test.py --image test.jpg --duration 10
 
 ```bash
 ls -lh /tmp/test.jpg
-python stress_test.py --image /tmp/test.jpg --duration 10
+python tests/performance/stress_test.py --image /tmp/test.jpg --duration 10
 ```
 
 ### 问题 3: 大量超时错误
@@ -237,7 +236,7 @@ python stress_test.py --image /tmp/test.jpg --duration 10
 
 **解决方案**:
 1. 增加 Triton 模型实例数（修改 config.pbtxt 的 `instance_group.count`）
-2. 降低 Kafka 并发数 `KAFKA_MAX_CONCURRENT`
+2. 降低推理 Worker 并发数 `WORKER_MAX_CONCURRENT`
 3. 启用动态批处理（如果模型支持）
 
 ### 如果 QPS 达标但 P99 延迟很高

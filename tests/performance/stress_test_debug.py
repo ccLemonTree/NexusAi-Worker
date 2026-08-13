@@ -6,13 +6,13 @@ import asyncio
 import json
 import time
 import sys
-import os
+from pathlib import Path
 import cv2
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from kafka.message import AnalyseInputMsg, LabelEntry
+from inference.message import AnalyseInputMsg, LabelEntry
 
 
 async def test_single_inference_debug(image_path: str):
@@ -49,7 +49,7 @@ async def test_single_inference_debug(image_path: str):
 
     # 3. 调用 process_message
     t0 = time.perf_counter()
-    from kafka.handlers import process_message
+    from inference.handler import process_message
     result = await process_message(msg_bytes)
     t1 = time.perf_counter()
     print(f"✓ [3] process_message: {(t1-t0)*1000:.1f} ms")

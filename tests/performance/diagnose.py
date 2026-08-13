@@ -5,8 +5,9 @@
 import os
 import sys
 import time
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 print("="*80)
 print("环境变量检查")
@@ -72,7 +73,7 @@ print("推理流程分析")
 print("="*80)
 print("Smoking-handsmoking 推理流程:")
 print()
-print("1. run_model_tasks (kafka/handlers.py)")
+print("1. run_model_tasks (inference/handler.py)")
 print("   - 使用 inference_executor (analyseRun)")
 print("   - 当前线程数:", inference_workers)
 print()

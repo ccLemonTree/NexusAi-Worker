@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-模拟 Kafka worker 的并发下载场景：
+模拟推理 worker 的并发下载场景：
 16 个并发任务，每个任务在独立线程池中下载图片
 """
 import asyncio
+import os
 import time
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from boto3.session import Session
-
-# EOS 配置
-access_key = "8DEEFL5I19XFGAO558QX"
-secret_key = "qkbPJ3O8kID2ovCACgIIJzlFYdC8UMVaj42N4MOH"
-endpoint = "https://eos-ningbo-1-internal.cmecloud.cn"
-bucket = "aisf-back-lsyd"
-key = "2026/07/23/13/D1778555061735/D1778555061735_20260723133404.jpeg"
 
 # 创建线程池（模拟 io_executor）
 io_executor = ThreadPoolExecutor(max_workers=32, thread_name_prefix="io")
@@ -23,14 +17,14 @@ io_executor = ThreadPoolExecutor(max_workers=32, thread_name_prefix="io")
 
 def download_sync():
     """同步下载（在线程池中执行）"""
-    session = Session(access_key, secret_key)
-    s3 = session.client('s3', endpoint_url=endpoint)
-    resp = s3.get_object(Bucket=bucket, Key=key)
+    session = Session(os.environ["EOS_ACCESS_KEY"], os.environ["EOS_SECRET_KEY"])
+    s3 = session.client('s3', endpoint_url=os.environ["EOS_ENDPOINT"])
+    resp = s3.get_object(Bucket=os.environ["EOS_BUCKET"], Key=os.environ["EOS_TEST_KEY"])
     return resp['Body'].read()
 
 
 async def download_one(task_id: int):
-    """模拟一个 Kafka 消息的下载流程"""
+    """模拟一个推理请求的下载流程"""
     t0 = time.perf_counter()
     loop = asyncio.get_event_loop()
 
@@ -48,7 +42,7 @@ async def main():
 
     t_start = time.perf_counter()
 
-    # 16 个并发任务（模拟 KAFKA_MAX_CONCURRENT=16）
+    # 16 个并发任务（模拟 WORKER_MAX_CONCURRENT=16）
     tasks = [download_one(i) for i in range(16)]
     results = await asyncio.gather(*tasks)
 

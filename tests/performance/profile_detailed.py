@@ -4,10 +4,10 @@
 """
 import time
 import sys
-import os
+from pathlib import Path
 import cv2
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from api.infer.Utils.class_info import CameraInfo
 from api.infer.running import analyseRun

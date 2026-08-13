@@ -14,9 +14,9 @@ from botocore.config import Config as BotocoreConfig
 from api.infer.Utils.class_info import CameraInfo
 from api.infer.running import _run_analyse_sync, logic_executor as executor
 from tools.concurrency import get_io_executor
-from kafka.message import AnalyseInputMsg, AnalyseResultMsg, LabelResult
+from inference.message import AnalyseInputMsg, AnalyseResultMsg, LabelResult
 from tools.init import chat_infer, cfg, client
-from tools.logger_tools import Kafka_Handler_logger as logger
+from tools.logger_tools import Inference_logger as logger
 
 # I/O 密集型任务专用线程池（EOS 下载、本地文件读取），与推理线程池隔离
 io_executor = get_io_executor()

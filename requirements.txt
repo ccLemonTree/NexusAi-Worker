@@ -1,8 +1,3 @@
-# ── Kafka ──────────────────────────────────────────────────────────────────
-aiokafka==0.11.0
-# aiokafka 0.11 uses cramjam for LZ4/snappy/zstd — lz4 package alone is NOT enough
-cramjam==2.11.0
-
 # ── HTTP / async I/O ───────────────────────────────────────────────────────
 aiohttp==3.12.13
 aiofiles==23.2.1

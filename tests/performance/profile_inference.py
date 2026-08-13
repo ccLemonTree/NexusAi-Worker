@@ -6,12 +6,12 @@ import asyncio
 import json
 import time
 import sys
-import os
+from pathlib import Path
 import cv2
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from kafka.message import AnalyseInputMsg, LabelEntry
+from inference.message import AnalyseInputMsg, LabelEntry
 
 
 async def profile_single_inference(image_path: str):
@@ -47,7 +47,7 @@ async def profile_single_inference(image_path: str):
     print("开始推理...\n")
     t_start = time.perf_counter()
 
-    from kafka.handlers import process_message
+    from inference.handler import process_message
     msg_bytes = json.dumps(msg.dict()).encode('utf-8')
     result = await process_message(msg_bytes)
 

@@ -58,13 +58,11 @@ request_logger = setup_logger("request", "request.log")
 # 创建错误日志器（只记录ERROR级别以上的日志）
 error_logger = setup_logger("error", "error.log", logging.ERROR)
 
-# Kafka Worker 日志
-Kafka_Consumer_logger = setup_logger("kafka_consumer", "kafka_consumer.log")
-Kafka_Handler_logger  = setup_logger("kafka_handler",  "kafka_handler.log")
-Kafka_Producer_logger = setup_logger("kafka_producer", "kafka_producer.log")
+# 推理服务日志
+Inference_logger = setup_logger("inference", "inference.log")
 
 
-# FastAPI启动时配置（仅在 HTTP 服务中调用，Kafka worker 不使用）
+# FastAPI启动时配置（仅在旧 HTTP 服务中调用）
 def configure_logging(app) -> None:
     from fastapi import FastAPI  # 懒导入，避免在 Kafka worker 中强依赖 fastapi
     @app.on_event("startup")

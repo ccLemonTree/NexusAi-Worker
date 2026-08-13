@@ -1,13 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# NexusAi — Kafka Inference Worker
+# NexusAi — Stateless Inference Service
 # Base: python:3.12-slim
 #
-# LZ4 note: the aiokafka PyPI wheel is compiled with HAS_LZ4=False (the
-# maintainer's build env has no lz4).  Even building from source only
-# recompiles the pre-generated .c files — the constant is already baked in.
-# Fix: remove the _crecords Cython extensions after install; aiokafka then
-# falls back to its pure-Python implementation which does `import lz4.frame`
-# at runtime, picking up the lz4 package we install here.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
@@ -28,8 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
- && find /usr/local/lib/python3.12/site-packages/aiokafka -name "*.so" -delete
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application source (see .dockerignore for exclusions)
 COPY . .
@@ -37,14 +30,9 @@ COPY . .
 # Create logs directory (run as root, no non-root user needed for now)
 RUN mkdir -p /app/logs
 
-# ─── Runtime environment variables (override via K8s ConfigMap / Secret) ────
-# KAFKA_BOOTSTRAP          Kafka broker address          (default: 192.168.1.115:9092)
-# KAFKA_INPUT_TOPIC        Consume topic                 (default: model_analyse)
-# KAFKA_RESULT_TOPIC       Produce topic                 (default: model_analyse_result)
-# KAFKA_CONSUMER_GROUP     Consumer group ID             (default: nexusai-model-worker)
-# KAFKA_USERNAME           SASL username — leave unset for no-auth mode
-# KAFKA_PASSWORD           SASL password (Secret)
-# KAFKA_MAX_CONCURRENT     In-pod concurrency            (default: 16)
+# Runtime settings are injected by the deployment platform.
+# WORKER_MAX_CONCURRENT    Worker inference concurrency  (default: 16)
+# WORKER_AUTH_TOKEN        Required shared HTTP secret
 # TRITON_SERVER            Triton gRPC address
 # TRITON_SERVER_VLM        Triton VLM gRPC address       (falls back to TRITON_SERVER)
 # TRITON_POOL_SIZE         gRPC connection pool size      (default: 70)
@@ -58,4 +46,6 @@ RUN mkdir -p /app/logs
 # VECTOR_TIMEOUT           Vector ingest timeout seconds  (default: 30)
 # EOS_TIMEOUT              EOS pre-signed URL timeout     (default: 15)
 
-CMD ["python", "kafka_main.py"]
+EXPOSE 8080
+
+CMD ["python", "worker_main.py"]

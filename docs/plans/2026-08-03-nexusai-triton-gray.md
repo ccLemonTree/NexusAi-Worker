@@ -51,11 +51,11 @@ Mount the NFS repository read-only at `/models-source` and build an `emptyDir` r
 
 Use `MILVUS_CLIENT=tcp://my-release-2-milvus.milvus.svc.cluster.local:19530`; the deployed `pymilvus` rejects `grpc://`, while `tcp://` was verified against the same gRPC port and database.
 
-**Step 3:** Confirm `/app/example/14.jpeg` and `/app/stress_test.py` exist.
+**Step 3:** Confirm `/app/example/14.jpeg` and `/app/tests/performance/stress_test.py` exist.
 
 ### Task 5: Execute functional smoke tests
 
-**Step 1:** Run `python stress_test.py --image /app/example/14.jpeg --count 1 --concurrent 1 --labels small` and inspect handler output for errors.
+**Step 1:** Run `python tests/performance/stress_test.py --image /app/example/14.jpeg --count 1 --concurrent 1 --labels small` and inspect handler output for errors.
 
 **Step 2:** Run the same command with `--labels all` to cover the local VLM.
 

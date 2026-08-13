@@ -11,7 +11,7 @@ x-triton-base: &triton-base
     - --load-model=*
   restart: unless-stopped
   shm_size: "3g"
-  logging:
+  logging: &logging
     driver: json-file
     options:
       max-size: "10m"
@@ -19,42 +19,21 @@ x-triton-base: &triton-base
   volumes:
     - /ai/chen/code/huggingface/aiseefor_model/:/models
   healthcheck:
-    test:
-      [
-        "CMD-SHELL",
-        "curl -fsS http://localhost:8000/v2/health/ready || exit 1"
-      ]
+    test: ["CMD-SHELL", "curl -fsS http://localhost:8000/v2/health/ready || exit 1"]
     interval: 30s
     start_period: 6m
     timeout: 10s
     retries: 10
 
-x-worker-env: &worker-env
-  KAFKA_BOOTSTRAP: "10.215.253.59:30322"
-  KAFKA_USERNAME: "hzxf"
-  KAFKA_PASSWORD: "Hzxf@20230321"
-  KAFKA_MAX_CONCURRENT: "16"
-  KAFKA_RESULT_TOPIC: "model_analyse_result"
-  # 心跳超时配置（缓解 rebalance）
-  KAFKA_SESSION_TIMEOUT_MS: "90000"      # 从 30s 增加到 90s
-  KAFKA_HEARTBEAT_INTERVAL_MS: "30000"   # 30s（必须 < session_timeout_ms/3）
-  KAFKA_MAX_POLL_INTERVAL_MS: "600000"   # 10分钟（已存在，确认配置）
-  # 重启/rebalance 生命周期保护
-  KAFKA_REBALANCE_DRAIN_TIMEOUT: "30"     # revoke 最多等待在途任务 30 秒
-  KAFKA_SHUTDOWN_DRAIN_TIMEOUT: "90"      # SIGTERM 后最多等待在途任务 90 秒
-  KAFKA_SKIP_BACKLOG_ON_START: "true"     # 进程首次分配时从当时最新位置开始
-
-  # 结果发送超时（防止阻塞）
-  KAFKA_SEND_TIMEOUT: "10"               # 10秒超时
+x-inference-env: &inference-env
+  WORKER_MAX_CONCURRENT: "${WORKER_MAX_CONCURRENT:-16}"
+  WORKER_AUTH_TOKEN: "${WORKER_AUTH_TOKEN:?WORKER_AUTH_TOKEN is required}"
   TRITON_MAX_WORKERS: "32"
   LOGIC_MAX_WORKERS: "32"
   IO_MAX_WORKERS: "8"
-
   INFER_BACKEND: "fire"
-
   STRUCT_EMBEDDING_MODEL: "http://ainginx:10425/v1"
   STRUCT_EMBEDDING_MODEL_NAME: "Qwen2.5-VL-7B-Instruct"
-
   MILVUS_CLIENT: "http://10.120.0.66:19530"
   MILVUS_DB_NAME: "vsearch_clip"
   MILVUS_VECTOR_COLLECTION_NAME: "vector"
@@ -62,40 +41,36 @@ x-worker-env: &worker-env
   MILVUS_FACE_COLLECTION_NAME: "face"
   MILVUS_PLATE_COLLECTION_NAME: "plate"
   MILVUS_FACE_DATABASE_COLLECTION_NAME: "face_database"
-
-  EOS_ACCESS_KEY: "8DEEFL5I19XFGAO558QX"
-  EOS_SECRET_KEY: "qkbPJ3O8kID2ovCACgIIJzlFYdC8UMVaj42N4MOH"
+  EOS_ACCESS_KEY: "${EOS_ACCESS_KEY:?EOS_ACCESS_KEY is required}"
+  EOS_SECRET_KEY: "${EOS_SECRET_KEY:?EOS_SECRET_KEY is required}"
   EOS_ENDPOINT: "https://eos-ningbo-1-internal.cmecloud.cn"
   EOS_BUCKET: "aisf-back-lsyd"
-
   OBJ_SAVE_PIC_LOCPATH: "/ai/capture/back/search_pic"
-
   VLM_TIMEOUT: "5"
   MODEL_TIMEOUT: "5"
   VECTOR_TIMEOUT: "5"
   IMAGE_VECTOR_URL: "http://10.120.0.196:10425/v1"
   VLLM_BASE_URL: "http://10.120.0.196:10425/v1"
   SEARCH_VECTOR_URL: "http://10.120.0.196:10425/v1"
-
   RERANKER_URL: "http://10.120.0.66:30009/v1/rerank/image-to-texts"
 
-  # 统计配置
-  KAFKA_STATS_DIR: "/logs/kafka_stats"
-  KAFKA_STATS_ENABLED: "true"
 x-worker-base: &worker-base
-  image: aisfh5.com:9091/nexusai/nexusai-kafka-worker:v20260723-stable
+  image: nexusai-inference:local
+  build: .
+  command: ["python", "worker_main.py"]
   restart: unless-stopped
   stop_grace_period: 2m
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "3"
+  logging: *logging
   volumes:
     - /ai/capture/back/search_pic:/ai/capture/back/search_pic
-    - /ai/logs/kafka_stats:/logs/kafka_stats  # 统计文件挂载
   environment:
-    <<: *worker-env
+    <<: *inference-env
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=2)"]
+    interval: 10s
+    start_period: 60s
+    timeout: 3s
+    retries: 3
 
 services:
   triton-server1:
@@ -109,15 +84,14 @@ services:
               device_ids: ["0"]
               capabilities: [gpu]
 
-  nexusai-kafka-worker1:
+  nexusai-worker1:
     <<: *worker-base
-    container_name: nexusai-kafka-worker1
-    hostname: nexusai-kafka-worker1  # 设置 hostname，用于统计文件命名
+    container_name: nexusai-worker1
     depends_on:
       triton-server1:
         condition: service_healthy
     environment:
-      <<: *worker-env
+      <<: *inference-env
       TRITON_SERVER: "triton-server1:8001"
       TRITON_SERVER_VLM: "triton-server1:8001"
       TRITON_SERVER_SAM3: "triton-server1:8001"
@@ -133,15 +107,14 @@ services:
               device_ids: ["1"]
               capabilities: [gpu]
 
-  nexusai-kafka-worker2:
+  nexusai-worker2:
     <<: *worker-base
-    container_name: nexusai-kafka-worker2
-    hostname: nexusai-kafka-worker2
+    container_name: nexusai-worker2
     depends_on:
       triton-server2:
         condition: service_healthy
     environment:
-      <<: *worker-env
+      <<: *inference-env
       TRITON_SERVER: "triton-server2:8001"
       TRITON_SERVER_VLM: "triton-server2:8001"
       TRITON_SERVER_SAM3: "triton-server2:8001"
@@ -157,15 +130,14 @@ services:
               device_ids: ["2"]
               capabilities: [gpu]
 
-  nexusai-kafka-worker3:
+  nexusai-worker3:
     <<: *worker-base
-    container_name: nexusai-kafka-worker3
-    hostname: nexusai-kafka-worker3
+    container_name: nexusai-worker3
     depends_on:
       triton-server3:
         condition: service_healthy
     environment:
-      <<: *worker-env
+      <<: *inference-env
       TRITON_SERVER: "triton-server3:8001"
       TRITON_SERVER_VLM: "triton-server3:8001"
       TRITON_SERVER_SAM3: "triton-server3:8001"
@@ -181,15 +153,18 @@ services:
               device_ids: ["3"]
               capabilities: [gpu]
 
-  nexusai-kafka-worker4:
+  nexusai-worker4:
     <<: *worker-base
-    container_name: nexusai-kafka-worker4
-    hostname: nexusai-kafka-worker4
+    container_name: nexusai-worker4
     depends_on:
       triton-server4:
         condition: service_healthy
     environment:
-      <<: *worker-env
+      <<: *inference-env
       TRITON_SERVER: "triton-server4:8001"
       TRITON_SERVER_VLM: "triton-server4:8001"
       TRITON_SERVER_SAM3: "triton-server4:8001"
+
+networks:
+  default:
+    name: nexusai-runtime
