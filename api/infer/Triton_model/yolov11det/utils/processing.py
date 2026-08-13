@@ -3,66 +3,6 @@ import cv2
 import numpy as np
 from tools.logger_tools import CangQiong_Smart_Model_logger as logger
 
-# def preprocess(img, input_shape, letter_box=True):
-
-#     """
-#     YOLOv11分类模型专用预处理函数（对齐官方逻辑）
-#     Args:
-#         img (np.ndarray): OpenCV读取的BGR格式图像（uint8）
-#         input_shape (tuple): 模型输入尺寸 (height, width)，默认(224,224)
-#     Returns:
-#         np.ndarray: 预处理后的CHW格式float32张量，已做ImageNet标准化
-#     """
-#     # 1. BGR→RGB（对齐官方）
-#     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-#     # 2. 缩放：用INTER_LINEAR_EXACT（OpenCV4.5+）模拟antialias=True
-#     interpolation = cv2.INTER_LINEAR_EXACT if cv2.__version__ >= "4.5.0" else cv2.INTER_LINEAR
-#     img = cv2.resize(img, (input_shape[1], input_shape[0]), interpolation=interpolation)
-
-#     # 3. 维度转换：HWC→CHW
-#     img = img.transpose((2, 0, 1))
-
-#     # 4. 仅归一化/255（无额外标准化，对齐官方）
-#     img = img.astype(np.float32) / 255.0
-
-#     return img
-
-
-
-# def postprocess(output, origin_w, origin_h, input_shape, conf_th=0.5, nms_threshold=0.5, label_names=None):
-#     if label_names is None:
-#         label_names = []
-
-#     # 假设 output 是 TensorRT 返回的原始 numpy 数组
-#     # YOLO11 输出通常是 (1, 4 + num_classes, 8400)
-#     if len(output.shape) == 3:
-#         # 必须要转置：(1, 84, 8400) -> (8400, 84)
-#         pred = output[0].transpose(1, 0)
-#     else:
-#         pred = output
-
-#     # 调用修正后的 NMS
-#     boxes = non_max_suppression(pred, conf_thres=conf_th, iou_thres=nms_threshold)
-
-#     detected_objects = []
-#     if len(boxes) == 0:
-#         return detected_objects
-
-#     for b in boxes:
-#         x1, y1, x2, y2, score, cls_id = b
-#         cls_id = int(cls_id)
-
-#         # 这里的坐标映射逻辑需根据你的预处理（是否 letterbox）来调整
-#         # 下面是一个简单的线性映射示例
-#         label_name = label_names[cls_id] if cls_id < len(label_names) else f"ID_{cls_id}"
-
-#         detected_objects.append(
-#             BoundingBox(cls_id, score, x1, x2, y1, y2, origin_w, origin_h, label_name)
-#         )
-
-#     return detected_objects
-
 
 def preprocess(img, input_shape, letter_box=True):
     if letter_box:
@@ -138,47 +78,6 @@ def postprocess(output, origin_w, origin_h, input_shape, conf_th=0.5, nms_thresh
         )
 
     return detected_objects
-
-# def postprocess(output, origin_w, origin_h, input_shape, conf_th=0.5, nms_threshold=0.5, label_names=None):
-#     if label_names is None:
-#         label_names = []
-
-#     # 1. 调整输出维度 (1, 84, 8400) -> (8400, 84)
-#     if len(output.shape) == 3:
-#         pred = output[0].transpose(1, 0)
-#     else:
-#         pred = output
-
-#     # 2. 执行 NMS (此时得到的是基于模型输入尺寸的坐标，如 640x640)
-#     boxes = non_max_suppression(pred, conf_thres=conf_th, iou_thres=nms_threshold)
-
-#     detected_objects = []
-#     if len(boxes) == 0:
-#         return detected_objects
-
-#     # 3. 计算坐标缩放比例 (基于 Resize 直接拉伸模式)
-#     scale_w = origin_w / input_shape[1]
-#     scale_h = origin_h / input_shape[0]
-
-#     for b in boxes:
-#         x1, y1, x2, y2, score, cls_id = b
-#         cls_id = int(cls_id)
-
-#         # 4. 将坐标映射回原图物理尺寸
-#         # 如果是左上角集中问题，就是因为少乘了这两个比例
-#         x1_scaled = x1 * scale_w
-#         y1_scaled = y1 * scale_h
-#         x2_scaled = x2 * scale_w
-#         y2_scaled = y2 * scale_h
-
-#         label_name = label_names[cls_id] if cls_id < len(label_names) else f"ID_{cls_id}"
-
-#         detected_objects.append(
-#             BoundingBox(cls_id, score, x1_scaled, x2_scaled, y1_scaled, y2_scaled, origin_w, origin_h, label_name)
-#         )
-
-#     return detected_objects
-
 
 
 
