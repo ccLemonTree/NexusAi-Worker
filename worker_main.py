@@ -13,6 +13,7 @@ from tools.logger_tools import Inference_logger as logger
 
 async def run_server() -> None:
     from inference_server import begin_drain, create_app, wait_for_drain
+    from inference.registration import DispatcherClient
 
     host = os.getenv("WORKER_HOST", "0.0.0.0")
     port = int(os.getenv("WORKER_PORT", "8080"))
@@ -28,6 +29,10 @@ async def run_server() -> None:
     )
     await runner.setup()
     await web.TCPSite(runner, host=host, port=port).start()
+
+    # Register with dispatcher and start heartbeat
+    dispatcher_client = DispatcherClient()
+    await dispatcher_client.start()
 
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -51,6 +56,7 @@ async def run_server() -> None:
         except asyncio.TimeoutError:
             logger.warning("Inference drain timed out after %ss", shutdown_timeout)
     finally:
+        await dispatcher_client.stop()
         await runner.cleanup()
 
 
