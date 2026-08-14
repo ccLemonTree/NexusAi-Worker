@@ -1,89 +1,89 @@
-# Safehead Whole-Image Secondary Detection Implementation Plan
+# Safehead 全图二次检测实施计划
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **给 Claude：** 实施时必须使用子技能 `superpowers:executing-plans`，逐项执行本计划。
 
-**Goal:** Return first-label Safehead detections only when they neither intersect nor lie near any second-label detection from a single whole-image inference.
+**目标：** 对整图只执行一次第二标签推理；仅当第一标签的 Safehead 检测框与所有第二标签检测框既不相交也不接近时，才返回该检测框。
 
-**Architecture:** Keep the existing `Model.execute` entry point, but separate the box-proximity rule into a small pure helper. When first-label results exist, run the configured second label once against the full image, then filter each first-label box by testing it against every second-label box after expanding the first box by 20% of its width and height.
+**架构：** 保留现有 `Model.execute` 入口，但将检测框邻近规则拆成一个小型纯函数。存在第一标签结果时，对整图执行一次已配置的第二标签推理；将每个第一标签检测框按自身宽高向四周扩展 20%，再与所有第二标签检测框比较并完成过滤。
 
-**Tech Stack:** Python, pytest, existing `BoundingBox` objects and `analyseRun` inference API.
+**技术栈：** Python、pytest、现有 `BoundingBox` 对象和 `analyseRun` 推理 API。
 
 ---
 
-## Understanding summary
+## 需求理解
 
-- `self.logicResult` contains the first-label (`personnew`) detections.
-- The second label is read from `cfg.logicModelDict[self.logicModelName][1]["label"]` (`yolov5nohead` in current configuration).
-- Second-label inference runs only when at least one first-label result exists.
-- Second-label inference receives the whole image and runs once per `execute` call.
-- A second-label box is considered related when it intersects the first box or intersects that first box expanded by 20% on every side.
-- Only first-label boxes unrelated to every second-label box are returned.
-- Model configuration and other pipelines are outside this change.
+- `self.logicResult` 包含第一标签（`personnew`）的检测结果。
+- 第二标签从 `cfg.logicModelDict[self.logicModelName][1]["label"]` 读取，当前配置为 `yolov5nohead`。
+- 只有至少存在一个第一标签结果时，才执行第二标签推理。
+- 第二标签推理接收整张图片，每次 `execute` 调用只执行一次。
+- 如果第二标签检测框与第一标签检测框相交，或与第一标签检测框向四周扩展 20% 后的区域相交，则认为两者相关。
+- 只返回与所有第二标签检测框都不相关的第一标签检测框。
+- 模型配置和其他流水线不在本次改动范围内。
 
-## Assumptions
+## 前提假设
 
-- “Expand by 20%” means adding 20% of the first box width to both left and right and 20% of its height to both top and bottom.
-- Edge contact counts as intersection/nearby.
-- If second-label inference returns no boxes, all first-label boxes remain eligible.
-- The returned box keeps its original coordinates and only its `classname` is changed, matching current behavior.
+- “扩展 20%”表示左右两侧各增加第一标签检测框宽度的 20%，上下两侧各增加其高度的 20%。
+- 边界接触视为相交或接近。
+- 如果第二标签推理没有返回检测框，则保留所有第一标签检测框。
+- 返回的检测框保持原始坐标，只修改 `classname`，与当前行为一致。
 
-## Decision log
+## 决策记录
 
-- Use proportional expansion instead of a fixed pixel threshold so behavior scales with image and target size.
-- Expand only the first-label box because it is the candidate being evaluated and provides a stable reference size.
-- Use axis-aligned rectangle overlap rather than center distance to handle differently sized detections.
-- Keep one whole-image inference outside the first-result loop to avoid duplicate inference work.
+- 使用按比例扩展而不是固定像素阈值，使判断能适应不同图片和目标尺寸。
+- 只扩展第一标签检测框，因为它是当前待判断的候选框，并能提供稳定的参考尺寸。
+- 使用轴对齐矩形重叠判断而不是中心点距离，以适配尺寸差异较大的检测框。
+- 将一次整图推理放在第一标签结果循环之外，避免重复推理。
 
-### Task 1: Geometry regression tests
+### 任务 1：几何逻辑回归测试
 
-**Files:**
-- Create: `tests/test_safehead.py`
-- Test: `tests/test_safehead.py`
+**涉及文件：**
+- 创建：`tests/test_safehead.py`
+- 测试：`tests/test_safehead.py`
 
-**Step 1: Write failing tests**
+**步骤 1：编写预期失败的测试**
 
-Add focused tests for direct overlap, a gap inside the 20% margin, a gap outside the margin, edge contact, and an empty second-label list.
+针对直接重叠、间距位于 20% 扩展范围内、间距超出扩展范围、边界接触和第二标签列表为空等场景添加重点测试。
 
-**Step 2: Run tests to verify they fail**
+**步骤 2：运行测试并确认失败**
 
-Run: `python -m pytest tests/test_safehead.py -v`
+运行：`python -m pytest tests/test_safehead.py -v`
 
-Expected: FAIL because the Safehead proximity/filter helper does not exist yet.
+预期结果：失败，因为 Safehead 邻近/过滤辅助函数尚未实现。
 
-### Task 2: Whole-image filtering implementation
+### 任务 2：实现整图过滤
 
-**Files:**
-- Modify: `api/infer/Model_pipline/Safehead/Safehead.py`
-- Test: `tests/test_safehead.py`
+**涉及文件：**
+- 修改：`api/infer/Model_pipline/Safehead/Safehead.py`
+- 测试：`tests/test_safehead.py`
 
-**Step 1: Add the minimal geometry helper**
+**步骤 1：添加最小化几何辅助函数**
 
-Implement axis-aligned overlap against the first box expanded by a default ratio of `0.2`.
+实现轴对齐重叠判断，将第一标签检测框按默认比例 `0.2` 扩展后再比较。
 
-**Step 2: Update `Model.execute`**
+**步骤 2：更新 `Model.execute`**
 
-Return early when no first-label results exist. Otherwise call `analyseRun` once with `[self.picture, self.picture]`, then retain only first-label boxes for which no second-label box overlaps the expanded area.
+没有第一标签结果时直接返回。否则使用 `[self.picture, self.picture]` 调用一次 `analyseRun`，然后只保留扩展区域未与任何第二标签检测框重叠的第一标签检测框。
 
-**Step 3: Run tests to verify they pass**
+**步骤 3：运行测试并确认通过**
 
-Run: `python -m pytest tests/test_safehead.py -v`
+运行：`python -m pytest tests/test_safehead.py -v`
 
-Expected: PASS.
+预期结果：通过。
 
-### Task 3: Repository-level verification
+### 任务 3：仓库级验证
 
-**Files:**
-- Verify: `api/infer/Model_pipline/Safehead/Safehead.py`
-- Verify: `tests/test_safehead.py`
+**涉及文件：**
+- 验证：`api/infer/Model_pipline/Safehead/Safehead.py`
+- 验证：`tests/test_safehead.py`
 
-**Step 1: Run syntax validation**
+**步骤 1：执行语法检查**
 
-Run: `python -m compileall kafka api tools utils`
+运行：`python -m compileall kafka api tools utils`
 
-Expected: exit code 0.
+预期结果：退出码为 0。
 
-**Step 2: Re-run focused tests**
+**步骤 2：重新运行重点测试**
 
-Run: `python -m pytest tests/test_safehead.py -v`
+运行：`python -m pytest tests/test_safehead.py -v`
 
-Expected: all tests pass with no failures.
+预期结果：全部测试通过，无失败项。

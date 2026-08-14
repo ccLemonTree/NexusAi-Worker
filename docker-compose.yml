@@ -30,10 +30,6 @@ x-inference-env: &inference-env
   WORKER_AUTH_TOKEN: "${WORKER_AUTH_TOKEN:?WORKER_AUTH_TOKEN is required}"
   WORKER_DRAIN_DELAY: "${WORKER_DRAIN_DELAY:-5}"
   WORKER_SHUTDOWN_TIMEOUT: "${WORKER_SHUTDOWN_TIMEOUT:-90}"
-  DISPATCHER_URL: "${DISPATCHER_URL:-http://nexusai-dispatcher1:8080}"
-  WORKER_HEARTBEAT_INTERVAL: "${WORKER_HEARTBEAT_INTERVAL:-5}"
-  WORKER_SERVICE_NAME: "${WORKER_SERVICE_NAME:-nexusai-worker}"
-  WORKER_NAMESPACE: "${WORKER_NAMESPACE:-default}"
   TRITON_MAX_WORKERS: "32"
   LOGIC_MAX_WORKERS: "32"
   IO_MAX_WORKERS: "8"
@@ -71,6 +67,10 @@ x-worker-base: &worker-base
     - /ai/capture/back/search_pic:/ai/capture/back/search_pic
   environment:
     <<: *inference-env
+  networks:
+    default:
+      aliases:
+        - nexusai-worker
   healthcheck:
     test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/ready', timeout=2)"]
     interval: 10s

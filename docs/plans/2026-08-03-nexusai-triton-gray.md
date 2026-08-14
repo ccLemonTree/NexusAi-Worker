@@ -1,70 +1,70 @@
-# NexusAI Triton Gray Deployment Implementation Plan
+# NexusAI Triton 灰度部署实施计划
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **给 Claude：** 实施时必须使用子技能 `superpowers:executing-plans`，逐项执行本计划。
 
-**Goal:** Deploy one isolated `ai/nexusai-triton-gray` Pod containing NexusAI and Triton, then validate local-image small-model and VLM inference without Kafka or EOS.
+**目标：** 部署一个包含 NexusAI 和 Triton 的隔离 `ai/nexusai-triton-gray` Pod，然后在不使用 Kafka 或 EOS 的情况下验证本地图片的小模型和 VLM 推理。
 
-**Architecture:** A single-replica Deployment owns a two-container Pod. NexusAI reaches Triton over Pod-local gRPC, while Triton mounts the existing Kafka model repository from `nfs-pvc-ai`; no Service selects the gray Pod.
+**架构：** 单副本 Deployment 管理一个包含两个容器的 Pod。NexusAI 通过 Pod 内部 gRPC 访问 Triton；Triton 从 `nfs-pvc-ai` 挂载现有 Kafka 模型仓库；不创建选择该灰度 Pod 的 Service。
 
-**Tech Stack:** Kubernetes 1.25, YAML, Python 3.12, Triton Inference Server, T4 GPU, NFS PVC, Paramiko SSH.
+**技术栈：** Kubernetes 1.25、YAML、Python 3.12、Triton Inference Server、T4 GPU、NFS PVC、Paramiko SSH。
 
 ---
 
-### Task 1: Create the deployment manifest
+### 任务 1：创建设计部署清单
 
-**Files:**
-- Create: `C:\Users\chen0\Documents\Codex\2026-07-18\ban\work\production\nexusai-triton-gray.yaml`
-- Reference: `C:\Users\chen0\Documents\Codex\2026-07-18\ban\work\production\nexusai-triton-gray-design.md`
+**涉及文件：**
+- 创建：`C:\Users\chen0\Documents\Codex\2026-07-18\ban\work\production\nexusai-triton-gray.yaml`
+- 参考：`C:\Users\chen0\Documents\Codex\2026-07-18\ban\work\production\nexusai-triton-gray-design.md`
 
-**Step 1:** Define a one-replica Deployment in namespace `ai` with unique label `app: nexusai-triton-gray` and no Service.
+**步骤 1：** 在 `ai` 命名空间中定义单副本 Deployment，使用唯一标签 `app: nexusai-triton-gray`，且不创建 Service。
 
-**Step 2:** Configure NexusAI with the approved image and environment, use `IfNotPresent` to permit the Docker-tested node cache, override the Kafka entry point with an idle loop, mount `nfs-pvc-ai` at `/ai`, and probe local port 8001.
+**步骤 2：** 为 NexusAI 配置已批准的镜像和环境；使用 `IfNotPresent` 以允许使用已通过 Docker 测试的节点缓存；用空闲循环覆盖 Kafka 入口；将 `nfs-pvc-ai` 挂载到 `/ai`；探测本地 8001 端口。
 
-**Step 3:** Configure Triton with the Compose-tested image, one T4 GPU, HTTP/gRPC/metrics ports, 3Gi `/dev/shm`, and PVC subpath `chen/code/huggingface/aiseefor_model_kafka` at `/models`.
+**步骤 3：** 为 Triton 配置已通过 Compose 测试的镜像、1 块 T4 GPU、HTTP/gRPC/metrics 端口、3Gi `/dev/shm`，并将 PVC 子路径 `chen/code/huggingface/aiseefor_model_kafka` 挂载到 `/models`。
 
-Mount the NFS repository read-only at `/models-source` and build an `emptyDir` repository at `/models`. Create a Pod-local `yolov26det_firemiddle` alias for the NFS model named `yolov26det_fire_middle`; never modify the shared NFS directory.
+将 NFS 仓库以只读方式挂载到 `/models-source`，并在 `/models` 创建 `emptyDir` 模型仓库。为 NFS 中名为 `yolov26det_fire_middle` 的模型创建 Pod 内部别名 `yolov26det_firemiddle`；不得修改共享 NFS 目录。
 
-### Task 2: Validate without changing the cluster
+### 任务 2：在不修改集群的情况下验证
 
-**Files:**
-- Test: `C:\Users\chen0\Documents\Codex\2026-07-18\ban\work\production\nexusai-triton-gray.yaml`
+**涉及文件：**
+- 测试：`C:\Users\chen0\Documents\Codex\2026-07-18\ban\work\production\nexusai-triton-gray.yaml`
 
-**Step 1:** Parse the local YAML and assert it contains one Deployment, two containers, one GPU request, and no Service.
+**步骤 1：** 解析本地 YAML，确认其中包含 1 个 Deployment、2 个容器、1 个 GPU 请求，并且不包含 Service。
 
-**Step 2:** Verify Harbor access, create the isolated `ai/aisf-regcred-gray` pull Secret without persisting credentials in the manifest, then send the manifest to `kubectl apply --dry-run=client -f -` on `36.138.227.241:3022`.
+**步骤 2：** 验证 Harbor 访问权限；创建隔离的 `ai/aisf-regcred-gray` 镜像拉取 Secret，且不在清单中持久化凭据；然后在 `<SSH_HOST>:<SSH_PORT>` 上将清单传给 `kubectl apply --dry-run=client -f -`。
 
-**Step 3:** Run `kubectl apply --dry-run=server -f -` and require exit code 0.
+**步骤 3：** 运行 `kubectl apply --dry-run=server -f -`，要求退出码为 0。
 
-### Task 3: Deploy and wait for readiness
+### 任务 3：部署并等待就绪
 
-**Step 1:** Apply with `kubectl apply -f -`.
+**步骤 1：** 使用 `kubectl apply -f -` 应用清单。
 
-**Step 2:** Run `kubectl -n ai rollout status deployment/nexusai-triton-gray --timeout=30m`.
+**步骤 2：** 运行 `kubectl -n ai rollout status deployment/nexusai-triton-gray --timeout=30m`。
 
-**Step 3:** Inspect Pod events, container readiness, GPU requests, images, and PVC mounts. If rollout fails, collect diagnostics and stop without changing existing workloads.
+**步骤 3：** 检查 Pod 事件、容器就绪状态、GPU 请求、镜像和 PVC 挂载。如果发布失败，收集诊断信息后停止，不得修改现有工作负载。
 
-### Task 4: Verify dependencies and models
+### 任务 4：验证依赖与模型
 
-**Step 1:** Check Triton logs and `/v2/models` repository index for load failures.
+**步骤 1：** 检查 Triton 日志和 `/v2/models` 仓库索引中是否存在加载失败。
 
-**Step 2:** From the NexusAI container, verify local Triton gRPC, `gme-lb.gme.svc.cluster.local:8000`, and `my-release-2-milvus.milvus.svc.cluster.local:19530` connectivity.
+**步骤 2：** 从 NexusAI 容器验证本地 Triton gRPC、`gme-lb.gme.svc.cluster.local:8000` 和 `my-release-2-milvus.milvus.svc.cluster.local:19530` 的连通性。
 
-Use `MILVUS_CLIENT=tcp://my-release-2-milvus.milvus.svc.cluster.local:19530`; the deployed `pymilvus` rejects `grpc://`, while `tcp://` was verified against the same gRPC port and database.
+使用 `MILVUS_CLIENT=tcp://my-release-2-milvus.milvus.svc.cluster.local:19530`；已部署的 `pymilvus` 不接受 `grpc://`，而 `tcp://` 已通过同一 gRPC 端口和数据库验证。
 
-**Step 3:** Confirm `/app/example/14.jpeg` and `/app/tests/performance/stress_test.py` exist.
+**步骤 3：** 确认 `/app/example/14.jpeg` 和 `/app/tests/performance/stress_test.py` 存在。
 
-### Task 5: Execute functional smoke tests
+### 任务 5：执行功能冒烟测试
 
-**Step 1:** Run `python tests/performance/stress_test.py --image /app/example/14.jpeg --count 1 --concurrent 1 --labels small` and inspect handler output for errors.
+**步骤 1：** 运行 `python tests/performance/stress_test.py --image /app/example/14.jpeg --count 1 --concurrent 1 --labels small`，检查处理器输出中是否存在错误。
 
-**Step 2:** Run the same command with `--labels all` to cover the local VLM.
+**步骤 2：** 使用 `--labels all` 运行相同命令，以覆盖本地 VLM。
 
-**Step 3:** Keep `vector=False`; do not write test records to Milvus.
+**步骤 3：** 保持 `vector=False`，不要向 Milvus 写入测试记录。
 
-### Task 6: Verify isolation and hand off
+### 任务 6：验证隔离并交付
 
-**Step 1:** Confirm `ai/nexusai-gpu` and `triton/triton-server` remain at 5 ready replicas.
+**步骤 1：** 确认 `ai/nexusai-gpu` 和 `triton/triton-server` 仍各有 5 个 Ready 副本。
 
-**Step 2:** Confirm no Service selects `app=nexusai-triton-gray`.
+**步骤 2：** 确认没有 Service 选择 `app=nexusai-triton-gray`。
 
-**Step 3:** Record final Pod status, node, images, test results, and rollback command `kubectl -n ai delete deployment nexusai-triton-gray`.
+**步骤 3：** 记录最终 Pod 状态、所在节点、镜像、测试结果和回滚命令 `kubectl -n ai delete deployment nexusai-triton-gray`。

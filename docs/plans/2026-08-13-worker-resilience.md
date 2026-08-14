@@ -1,61 +1,61 @@
-# Worker Resilience Implementation Plan
+# Worker 可靠性实施计划
 
-> **For Claude:** REQUIRED SUB-SKILL: Use test-driven-development and implement task-by-task.
+> **给 Claude：** 实施时必须使用 `test-driven-development` 子技能，并逐项完成本计划。
 
-**Goal:** Add capacity-aware retry, automatic circuit breaking, readiness draining, and graceful worker shutdown without changing the established Kafka ownership or per-partition ordering.
+**目标：** 在不改变现有 Kafka 职责边界和分区内顺序的前提下，增加容量感知重试、自动熔断、readiness 摘流和 Worker 优雅关闭能力。
 
-**Architecture:** `NexusAi-Dispatcher` remains the only Kafka consumer and result producer. It sends inference requests through a Service, immediately retries capacity responses on a new connection, backs off infrastructure failures, and temporarily opens failed targets. `NexusAi` remains stateless and exposes liveness/readiness while draining in-flight HTTP work on shutdown.
+**架构：** `NexusAi-Dispatcher` 仍是唯一的 Kafka 消费者和结果生产者。它通过 Service 发送推理请求，收到容量响应时立即使用新连接重试，基础设施故障时执行退避，并临时熔断故障目标。`NexusAi` 保持无状态，提供 liveness/readiness，并在关闭时等待在途 HTTP 请求完成。
 
-**Tech Stack:** Python 3.12, asyncio, aiohttp, aiokafka, unittest, Docker Compose.
+**技术栈：** Python 3.12、asyncio、aiohttp、aiokafka、unittest、Docker Compose。
 
 ---
 
-### Task 1: Dispatcher capacity retry and circuit breaker
+### 任务 1：Dispatcher 容量重试与熔断器
 
-**Files:**
-- Create: `../NexusAi-Dispatcher/tests/test_worker_client.py`
-- Modify: `../NexusAi-Dispatcher/dispatcher/worker_client.py`
-- Modify: `../NexusAi-Dispatcher/.env.example`
-- Modify: `../NexusAi-Dispatcher/docker-compose.yml`
+**涉及文件：**
+- 创建：`../NexusAi-Dispatcher/tests/test_worker_client.py`
+- 修改：`../NexusAi-Dispatcher/dispatcher/worker_client.py`
+- 修改：`../NexusAi-Dispatcher/.env.example`
+- 修改：`../NexusAi-Dispatcher/docker-compose.yml`
 
-1. Add an async test proving `429`/capacity `503` retries immediately and does not increment infrastructure failure state.
-2. Add an async test proving connection failures open a target after the configured threshold, skip it during cooldown, and allow one half-open probe after cooldown.
-3. Run only `python -m unittest tests.test_worker_client -v` and confirm the new tests fail for missing behavior.
-4. Implement the smallest per-target circuit state using monotonic time; keep normal successful connections reusable and close failed/capacity responses before retry.
-5. Run the same focused test and confirm it passes.
+1. 添加异步测试，证明 `429` 或容量类 `503` 会立即重试，并且不会增加基础设施故障计数。
+2. 添加异步测试，证明连接失败达到配置阈值后会熔断目标，冷却期间会跳过该目标，冷却结束后只允许一次半开探测。
+3. 只运行 `python -m unittest tests.test_worker_client -v`，确认新测试因缺少对应行为而失败。
+4. 使用单调时钟实现最小化的按目标熔断状态；正常成功连接保持可复用，失败或容量响应在重试前关闭。
+5. 再次运行相同的重点测试并确认通过。
 
-### Task 2: Preserve Kafka ordering and backpressure
+### 任务 2：保持 Kafka 顺序与背压
 
-**Files:**
-- Modify: `../NexusAi-Dispatcher/tests/test_consumer.py`
-- Modify only if required: `../NexusAi-Dispatcher/dispatcher/consumer.py`
+**涉及文件：**
+- 修改：`../NexusAi-Dispatcher/tests/test_consumer.py`
+- 仅在必要时修改：`../NexusAi-Dispatcher/dispatcher/consumer.py`
 
-1. Add a test for the established order: worker result, Kafka result acknowledgement, then input offset commit.
-2. Add a test that a failure rewinds the current offset and never advances the partition.
-3. Keep one in-flight task per partition; do not add an application queue or concurrent offset frontier.
-4. Run only the focused consumer tests after explicit user authorization.
+1. 添加测试验证既定顺序：先取得 Worker 结果，再收到 Kafka 结果确认，最后提交输入 offset。
+2. 添加测试，验证失败时会回退当前 offset，并且绝不会错误推进分区进度。
+3. 每个分区只保留一个在途任务；不增加应用队列或并发 offset 前沿跟踪器。
+4. 获得用户明确授权后，只运行相关的 Consumer 测试。
 
-### Task 3: Worker readiness and graceful drain
+### 任务 3：Worker readiness 与优雅摘流
 
-**Files:**
-- Create: `tests/test_inference_server.py`
-- Modify: `inference_server.py`
-- Modify: `worker_main.py`
-- Modify: `docker-compose.yml`
+**涉及文件：**
+- 创建：`tests/test_inference_server.py`
+- 修改：`inference_server.py`
+- 修改：`worker_main.py`
+- 修改：`docker-compose.yml`
 
-1. Add a test proving `/ready` is 200 while accepting traffic and 503 after drain begins.
-2. Add a test proving draining rejects new `/process` requests while an already accepted request can finish.
-3. Run only `python -m unittest tests.test_inference_server -v` and confirm the new tests fail for missing behavior.
-4. Track accepting/in-flight state in the aiohttp application. On SIGTERM, set readiness false, wait a short propagation delay, then use aiohttp cleanup with a bounded shutdown timeout.
-5. Change the deployment readiness check from `/health` to `/ready`; keep `/health` as liveness.
-6. Run the same focused test after explicit user authorization.
+1. 添加测试，证明接收流量时 `/ready` 返回 200，开始摘流后返回 503。
+2. 添加测试，证明摘流时会拒绝新的 `/process` 请求，而已经接收的请求仍能执行完成。
+3. 只运行 `python -m unittest tests.test_inference_server -v`，确认新测试因缺少对应行为而失败。
+4. 在 aiohttp 应用中跟踪是否接收请求及在途请求状态。收到 SIGTERM 后，将 readiness 设为 false，等待短暂的状态传播时间，然后通过 aiohttp cleanup 在限定的关闭超时内完成清理。
+5. 将部署的 readiness 检查从 `/health` 改为 `/ready`；`/health` 继续用作 liveness。
+6. 获得用户明确授权后，再次运行相同的重点测试。
 
-### Task 4: Documentation and release
+### 任务 4：文档与发布
 
-**Files:**
-- Modify: `../NexusAi-Dispatcher/README.md`
-- Modify: `docs/designs/2026-08-13-dispatcher-inference-separation.md`
+**涉及文件：**
+- 修改：`../NexusAi-Dispatcher/README.md`
+- 修改：`docs/designs/2026-08-13-dispatcher-inference-separation.md`
 
-1. Document normal routing, immediate capacity retry, infrastructure backoff, breaker thresholds, readiness drain, and the 20-30% capacity-headroom recommendation.
-2. Record that Service balancing is not exact idle-worker selection and that `taskId` deduplication remains mandatory.
-3. Inspect staged diffs, then commit and push each repository only after focused verification is explicitly authorized and completed.
+1. 记录正常路由、容量响应即时重试、基础设施故障退避、熔断阈值、readiness 摘流，以及保留 20%～30% 容量余量的建议。
+2. 明确 Service 负载均衡不等于精确选择空闲 Worker，并且仍必须根据 `taskId` 去重。
+3. 检查暂存区差异；只有在获得明确授权并完成重点验证后，才分别提交和推送两个仓库。
