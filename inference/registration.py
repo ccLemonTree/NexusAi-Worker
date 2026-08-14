@@ -185,12 +185,26 @@ class DispatcherClient:
         Start registration and heartbeat background tasks.
         Called by worker_main on startup.
         """
-        # Initial registration (blocking)
-        success = await self.register()
-        if not success:
-            logger.warning(
-                "Initial registration failed, will retry in heartbeat loop"
-            )
+        # Initial registration with retries (blocking)
+        max_retries = 5
+        for attempt in range(1, max_retries + 1):
+            success = await self.register()
+            if success:
+                break
+            if attempt < max_retries:
+                backoff = min(2.0 ** (attempt - 1), 30.0)
+                logger.warning(
+                    "Initial registration failed, retrying in %.1fs (attempt %d/%d)",
+                    backoff,
+                    attempt,
+                    max_retries,
+                )
+                await asyncio.sleep(backoff)
+            else:
+                logger.error(
+                    "Initial registration failed after %d attempts, heartbeat loop will retry",
+                    max_retries,
+                )
 
         # Start background heartbeat
         if self._heartbeat_task is None:
