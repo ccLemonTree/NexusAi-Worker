@@ -132,8 +132,6 @@ def postprocess(
 
         # 目标框占原图面积的比例
         box_ratio = (box_w * box_h) / image_area
-        if box_ratio >0.8:
-            continue
         # 动态计算外扩比例
         if box_ratio < ratio_threshold:
             # 越小的框，expand_ratio 越接近 max_expand_ratio

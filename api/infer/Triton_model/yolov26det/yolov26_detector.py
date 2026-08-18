@@ -124,10 +124,6 @@ def yolov26det(triton_client, service_name, init_data, img, label_to_detect,box_
     detected_objects = postprocess(output_data[0], img.shape[1], img.shape[0], input_shape, 0.0,
                                           iou_thres, label_names)
 
-    logger.info(
-        f"[yolov26det] {service_name} 原始检测框={len(detected_objects)}  "
-        f"label_thresholds={label_thresholds}  flag={flag}"
-    )
 
     # 过滤：每个标签使用独立的阈值
     for i in range(len(detected_objects)):
@@ -150,11 +146,6 @@ def yolov26det(triton_client, service_name, init_data, img, label_to_detect,box_
                 if label_name in label_to_detect:
                     result_to_return.append(box)
 
-    if not result_to_return:
-        # 打印置信度最高的前5个框，辅助判断是阈值问题还是模型无检测
-        top5 = sorted(detected_objects, key=lambda b: b.confidence, reverse=True)[:5]
-        top5_info = [(label_names[b.classID], round(b.confidence, 4)) for b in top5]
-        logger.info(f"[yolov26det] {service_name} 过滤后无结果，置信度Top5: {top5_info}")
 
     postprocessing_end = time.time()  # 时间测试
     time_json["Pretreatment"] = pretreatment_end - pretreatment_start
