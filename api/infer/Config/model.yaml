@@ -322,3 +322,49 @@ Hot-work:
       desc: 重叠度
   label_desc: 动火作业
   show: true
+
+
+Parcel-person:
+  0:
+    label:
+      - sam3_Person
+  1:
+    label:
+      - sam3_Cardboard box
+  param:
+    - conf: 0.85
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 人拿包裹
+  show: true
+
+Color-plate:
+  0:
+    label:
+      - sam3_License plate
+  1:
+    label:
+      - blue
+  param:
+    - conf: 0.85
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 蓝牌
+  show: true
+
+Charging-gun:
+  0:
+    label:
+      - sam3_ev charging gun
+  1:
+    label:
+      - sam3_Car
+  param:
+    - conf: 0.85
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 充电枪未归位
+  show: true

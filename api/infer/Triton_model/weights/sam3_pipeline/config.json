@@ -122,7 +122,9 @@
     "sam3_Drone",
     "sam3_Color steel plate",
     "sam3_Prefab cabin",
-    "sam3_Billboard"
+    "sam3_Billboard",
+    "sam3_License plate",
+    "sam3_ev charging gun"
   ],
   "classes_zh": [
     "人脸",
@@ -192,7 +194,9 @@
     "无人机",
     "彩钢板",
     "活动板房",
-    "广告牌"
+    "广告牌",
+    "车牌",
+    "充电枪"
   ],
   "show": "true"
 }
