@@ -93,6 +93,7 @@ services:
   nexusai-worker1:
     <<: *worker-base
     container_name: nexusai-worker1
+    hostname: nexusai-worker1
     depends_on:
       triton-server1:
         condition: service_healthy
@@ -116,6 +117,7 @@ services:
   nexusai-worker2:
     <<: *worker-base
     container_name: nexusai-worker2
+    hostname: nexusai-worker2
     depends_on:
       triton-server2:
         condition: service_healthy
@@ -139,6 +141,7 @@ services:
   nexusai-worker3:
     <<: *worker-base
     container_name: nexusai-worker3
+    hostname: nexusai-worker3
     depends_on:
       triton-server3:
         condition: service_healthy
@@ -162,6 +165,7 @@ services:
   nexusai-worker4:
     <<: *worker-base
     container_name: nexusai-worker4
+    hostname: nexusai-worker4
     depends_on:
       triton-server4:
         condition: service_healthy

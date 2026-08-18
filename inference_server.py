@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import socket
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -41,6 +42,7 @@ def create_app(process_handler: ProcessHandler | None = None) -> web.Application
 
     max_concurrent = max(1, int(os.getenv("WORKER_MAX_CONCURRENT", "16")))
     semaphore = asyncio.Semaphore(max_concurrent)
+    worker_id = socket.gethostname()
     token = os.environ["WORKER_AUTH_TOKEN"]
     if not token:
         raise ValueError("WORKER_AUTH_TOKEN must not be empty")
@@ -84,8 +86,22 @@ def create_app(process_handler: ProcessHandler | None = None) -> web.Application
                     state.drained.set()
         return web.json_response(result)
 
+    @web.middleware
+    async def worker_identity(
+        request: web.Request,
+        handler: web.RequestHandler,
+    ) -> web.StreamResponse:
+        try:
+            response = await handler(request)
+        except web.HTTPException as error:
+            error.headers["X-Worker-ID"] = worker_id
+            raise
+        response.headers["X-Worker-ID"] = worker_id
+        return response
+
     app = web.Application(
-        client_max_size=int(os.getenv("WORKER_MAX_REQUEST_BYTES", str(1024 * 1024)))
+        client_max_size=int(os.getenv("WORKER_MAX_REQUEST_BYTES", str(1024 * 1024))),
+        middlewares=[worker_identity],
     )
     app[STATE] = WorkerState()
     app[STATE].drained.set()

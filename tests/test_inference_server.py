@@ -33,7 +33,8 @@ class InferenceServerTest(unittest.IsolatedAsyncioTestCase):
         environment.start()
         self.addCleanup(environment.stop)
 
-        self.app = create_app(process_handler=process_message)
+        with patch("socket.gethostname", return_value="nexusai-worker-test"):
+            self.app = create_app(process_handler=process_message)
         self.client = TestClient(TestServer(self.app))
         await self.client.start_server()
 
@@ -58,6 +59,7 @@ class InferenceServerTest(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(503, response.status)
+        self.assertEqual("nexusai-worker-test", response.headers["X-Worker-ID"])
 
     async def test_drain_allows_accepted_work_to_finish(self):
         request = asyncio.create_task(
@@ -77,6 +79,7 @@ class InferenceServerTest(unittest.IsolatedAsyncioTestCase):
 
         response = await request
         self.assertEqual(200, response.status)
+        self.assertEqual("nexusai-worker-test", response.headers["X-Worker-ID"])
 
 
 if __name__ == "__main__":
