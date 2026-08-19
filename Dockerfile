@@ -13,7 +13,11 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Runtime system libraries for opencv-python-headless and numpy/OpenMP + timezone setup
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i \
+        -e 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g' \
+        -e 's|http://deb.debian.org/debian-security|https://mirrors.aliyun.com/debian-security|g' \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         libgomp1 \
         tzdata \
@@ -22,7 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir \
+        --index-url https://mirrors.aliyun.com/pypi/simple/ \
+        -r requirements.txt
 
 # Copy application source (see .dockerignore for exclusions)
 COPY . .
