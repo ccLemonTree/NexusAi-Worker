@@ -1,9 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # NexusAi — Stateless Inference Service
-# Base: python:3.12-slim
+# Base: registry.cn-hangzhou.aliyuncs.com/lemontree_images/python:3.12-slim
 #
 # ─────────────────────────────────────────────────────────────────────────────
-FROM python:3.12-slim
+FROM registry.cn-hangzhou.aliyuncs.com/lemontree_images/python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
