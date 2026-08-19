@@ -1,0 +1,20 @@
+version: "3.8"
+
+# 叠加到 docker-compose.yml：每台 Worker 服务器公开 4 个独立端口。
+# Dispatcher 通过 http://<服务器IP>:<端口> 访问，不依赖跨主机 Docker DNS。
+services:
+  nexusai-worker1:
+    ports:
+      - "${WORKER_PORT_1:-8081}:8080"
+
+  nexusai-worker2:
+    ports:
+      - "${WORKER_PORT_2:-8082}:8080"
+
+  nexusai-worker3:
+    ports:
+      - "${WORKER_PORT_3:-8083}:8080"
+
+  nexusai-worker4:
+    ports:
+      - "${WORKER_PORT_4:-8084}:8080"
