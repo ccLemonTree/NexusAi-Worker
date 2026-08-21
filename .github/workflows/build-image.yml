@@ -1,0 +1,46 @@
+name: Build and Push Inference Image
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    runs-on: [self-hosted, linux, docker]
+    env:
+      IMAGE: aisfh5.com:9091/nexusai/nexusai-inference
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Test
+        run: python -m unittest tests.test_inference_server tests.test_worker_project_boundary tests.test_github_actions_workflow
+      - name: Compile
+        run: python -m compileall -q inference api tools utils worker_main.py
+      - name: Generate image tag
+        id: tag
+        shell: bash
+        run: echo "value=v$(TZ=Asia/Shanghai date +'%Y%m%d%H%M%S')" >> "$GITHUB_OUTPUT"
+      - name: Login to image registry
+        env:
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        shell: bash
+        run: echo "$REGISTRY_PASSWORD" | docker login aisfh5.com:9091 --username "$REGISTRY_USERNAME" --password-stdin
+      - name: Build and push
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        shell: bash
+        run: |
+          docker build --tag "$IMAGE:$TAG" .
+          docker push "$IMAGE:$TAG"
