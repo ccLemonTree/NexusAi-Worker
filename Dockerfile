@@ -38,6 +38,7 @@ RUN mkdir -p /app/logs
 
 # Runtime settings are injected by the deployment platform.
 # WORKER_MAX_CONCURRENT    Worker inference concurrency  (default: 16)
+# WORKER_CAPACITY_WEIGHT   Relative sustained throughput (default: 1.0)
 # WORKER_AUTH_TOKEN        Required shared HTTP secret
 # TRITON_SERVER            Triton gRPC address
 # TRITON_SERVER_VLM        Triton VLM gRPC address       (falls back to TRITON_SERVER)

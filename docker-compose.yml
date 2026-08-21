@@ -99,6 +99,7 @@ services:
         condition: service_healthy
     environment:
       <<: *inference-env
+      WORKER_CAPACITY_WEIGHT: "${WORKER_CAPACITY_WEIGHT_1:-1.0}"
       TRITON_SERVER: "triton-server1:8001"
       TRITON_SERVER_VLM: "triton-server1:8001"
       TRITON_SERVER_SAM3: "triton-server1:8001"
@@ -123,6 +124,7 @@ services:
         condition: service_healthy
     environment:
       <<: *inference-env
+      WORKER_CAPACITY_WEIGHT: "${WORKER_CAPACITY_WEIGHT_2:-1.0}"
       TRITON_SERVER: "triton-server2:8001"
       TRITON_SERVER_VLM: "triton-server2:8001"
       TRITON_SERVER_SAM3: "triton-server2:8001"
@@ -147,6 +149,7 @@ services:
         condition: service_healthy
     environment:
       <<: *inference-env
+      WORKER_CAPACITY_WEIGHT: "${WORKER_CAPACITY_WEIGHT_3:-1.0}"
       TRITON_SERVER: "triton-server3:8001"
       TRITON_SERVER_VLM: "triton-server3:8001"
       TRITON_SERVER_SAM3: "triton-server3:8001"
@@ -171,6 +174,7 @@ services:
         condition: service_healthy
     environment:
       <<: *inference-env
+      WORKER_CAPACITY_WEIGHT: "${WORKER_CAPACITY_WEIGHT_4:-1.0}"
       TRITON_SERVER: "triton-server4:8001"
       TRITON_SERVER_VLM: "triton-server4:8001"
       TRITON_SERVER_SAM3: "triton-server4:8001"

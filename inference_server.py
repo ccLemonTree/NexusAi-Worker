@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import socket
 from collections.abc import Awaitable, Callable
@@ -40,9 +41,19 @@ def create_app(process_handler: ProcessHandler | None = None) -> web.Application
 
         process_handler = process_message
 
-    max_concurrent = max(1, int(os.getenv("WORKER_MAX_CONCURRENT", "16")))
+    max_concurrent = int(os.getenv("WORKER_MAX_CONCURRENT", "16"))
+    if max_concurrent <= 0:
+        raise ValueError("WORKER_MAX_CONCURRENT must be greater than zero")
+    capacity_weight = float(os.getenv("WORKER_CAPACITY_WEIGHT", "1.0"))
+    if not math.isfinite(capacity_weight) or capacity_weight <= 0:
+        raise ValueError("WORKER_CAPACITY_WEIGHT must be a finite positive number")
     semaphore = asyncio.Semaphore(max_concurrent)
     worker_id = socket.gethostname()
+    worker_headers = {
+        "X-Worker-ID": worker_id,
+        "X-Worker-Weight": str(capacity_weight),
+        "X-Worker-Max-Concurrent": str(max_concurrent),
+    }
     token = os.environ["WORKER_AUTH_TOKEN"]
     if not token:
         raise ValueError("WORKER_AUTH_TOKEN must not be empty")
@@ -94,9 +105,9 @@ def create_app(process_handler: ProcessHandler | None = None) -> web.Application
         try:
             response = await handler(request)
         except web.HTTPException as error:
-            error.headers["X-Worker-ID"] = worker_id
+            error.headers.update(worker_headers)
             raise
-        response.headers["X-Worker-ID"] = worker_id
+        response.headers.update(worker_headers)
         return response
 
     app = web.Application(
