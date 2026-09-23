@@ -370,6 +370,8 @@ Charging-gun:
   0:
     label:
       - sam3_ev charging gun
+  1:
+    label:
       - sam3_Car
   param:
     - conf: 0.85

@@ -236,6 +236,9 @@ def _call_models_sync(img: np.ndarray, entries: list) -> list:
             rule = label_rules[label]
             if first_stage_label not in label_rules or rule["conf"] < label_rules[first_stage_label]["conf"]:
                 label_rules[first_stage_label] = rule
+        num = next((param["num"] for param in cfg.logicModelDict[label].get("param", []) if "num" in param), None)
+        if num is not None:
+            label_rules[label] = {**label_rules[label], "num": num}
 
     result = {}
     if label_rules:
