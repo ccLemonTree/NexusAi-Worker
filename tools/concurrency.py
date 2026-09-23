@@ -127,7 +127,7 @@ class TritonClientPool:
 _triton_pool: TritonClientPool | None = None
 _triton_pool_vlm: TritonClientPool | None = None
 _triton_pool_sam3: TritonClientPool | None = None
-
+_triton_pool_smoking: TritonClientPool | None = None
 
 def get_triton_pool() -> TritonClientPool:
     """返回进程级单例连接池，首次调用时按 TRITON_SERVER 环境变量初始化。"""
