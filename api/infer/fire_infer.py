@@ -1,153 +1,14 @@
-# import os.path
-# from api.infer.Triton_model.triton_client import triton_inference
-# import cv2
-# import numpy as np
-#
-# def showimg_scale_tools(oriimg, bbox, scale):
-#     """
-#     CV2版本：基于BoundingBox目标框，按目标宽高比调整框 + 边界扩展，绘制红色矩形
-#     :param oriimg: cv2 BGR图像
-#     :param bbox: BoundingBox实例
-#     :param scale: 目标宽高比 width / height
-#     :return: 绘制框后的图像（注意：cv2.rectangle会原地修改图像，建议外部传copy）
-#     """
-#     # 从BoundingBox读取参数
-#     w = bbox.image_width
-#     h = bbox.image_height
-#     box_width = bbox.width()
-#     box_height = bbox.height()
-#     xpoints, ypoints = bbox.topLeft()   # x1,y1
-#
-#     box_sacel = box_width / box_height
-#     add_height, add_width = 0.0, 0.0
-#
-#     if box_sacel > scale:
-#         add_height = (box_width / scale) - box_height
-#     elif box_sacel < scale:
-#         add_width = (scale * box_height) - box_width
-#
-#     xpoints = float(xpoints)
-#     ypoints = float(ypoints)
-#     box_width = float(box_width)
-#     box_height = float(box_height)
-#
-#     # 宽度方向居中扩展校正
-#     if (xpoints - (add_width / 2)) < 0:
-#         xpoints = 0.0
-#     elif (xpoints + box_width + (add_width / 2)) > w:
-#         wabscha = abs(xpoints + box_width + (add_width / 2) - w)
-#         xpoints = xpoints - wabscha
-#     else:
-#         xpoints = xpoints - add_width / 2
-#
-#     # 高度方向居中扩展校正
-#     if (ypoints - (add_height / 2)) < 0:
-#         ypoints = 0.0
-#     elif (ypoints + box_height + (add_height / 2)) > h:
-#         wabscha = abs(ypoints + box_height + (add_height / 2) - h)
-#         ypoints = ypoints - wabscha
-#     else:
-#         ypoints = ypoints - add_height / 2
-#
-#     box_width += add_width
-#     box_height += add_height
-#
-#     newx1 = xpoints
-#     newy1 = ypoints
-#     newx2 = xpoints + box_width
-#     newy2 = ypoints + box_height
-#
-#     newx1 = np.clip(newx1, 0, w - 1)
-#     newy1 = np.clip(newy1, 0, h - 1)
-#     newx2 = np.clip(newx2, 0, w - 1)
-#     newy2 = np.clip(newy2, 0, h - 1)
-#
-#     expand = h / 18
-#     newx1 = int(newx1 - expand)
-#     newy1 = int(newy1 - expand)
-#     newx2 = int(newx2 + expand)
-#     newy2 = int(newy2 + expand)
-#
-#     # cv2绘制矩形 BGR红色，线宽3
-#     cv2.rectangle(oriimg, (newx1, newy1), (newx2, newy2), (0, 0, 255), thickness=3)
-#     return oriimg
-#
-# class fire_infer(object):
-#     def __init__(self, base_url: str, model_name: str, request_id: str = None, message: list = [],
-#                  mode: str = 'infer'):
-#         self.message = message
-#         self.request_id = request_id
-#         self.model_name = model_name
-#         self.mode = mode
-#         self.base_url = base_url + "/chat/completions"
-#         # 普通检测模型使用 TRITON_SERVER
-#         self.tritonServer = triton_inference(os.path.join(os.getenv("NEXUSAI_HOME"),"api","infer","Triton_model","weights"),
-#                                 urls=[os.getenv("TRITON_SERVER")])
-#         # VLM 大模型优先使用 TRITON_SERVER_VLM，未配置时回退到 TRITON_SERVER
-#         vlm_server = os.getenv("TRITON_SERVER_VLM") or os.getenv("TRITON_SERVER")
-#         self.tritonServerVLM = triton_inference(os.path.join(os.getenv("NEXUSAI_HOME"),"api","infer","Triton_model","weights"),
-#                                 urls=[vlm_server])
-#     def infer(self, prompt: str, question: str, file=None):
-#
-#         # 调用推理服务
-#         try:
-#             if isinstance(file, str):
-#                 img = cv2.imread(file)
-#                 _ = img.shape
-#             elif isinstance(file, bytes):
-#                 arr = np.frombuffer(file, np.uint8)
-#                 img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-#             else:
-#                 img = file
-#                 _ = img.shape
-#
-#         except Exception as e:
-#             print(f"Can not read this image ! {e}")
-#             return []
-#         result = self.tritonServer.run("yolov26det_fire", img,
-#                                        label_to_detect={'26_small_smoke': {'iou': 0.2, 'conf': 0.2},
-#                                                         '26_small_fire': {'iou': 0.2, 'conf': 0.2}})
-#         if len(result) != 0:
-#             for bounding in result:
-#                 img = showimg_scale_tools(img,bounding,1.2)
-#             result_fire = self.tritonServerVLM.run("cangqiong_0.8b", img,label_to_detect={'desc_fire': {'iou': 1, 'conf': 1}})
-#             if not result_fire:
-#                 return []
-#             result_to_return = result_fire[0]
-#             analyse_desc = result_to_return.parames_vector['analyse_desc']
-#
-#             # 分类关键词定义，严格控制匹配优先级
-#             category_rules = [
-#                 # (返回名称, 关键词列表) 从上到下优先级依次降低
-#                 ("火情检测-大模型",
-#                  ["火苗", "火焰", "冒火", "燃烧", "火炬", "火把", "点燃", "明火", "火源", "火堆", "烤火", "起火"]),
-#                 # ("动火作业检测-大模型", ["电焊", "焊接", "切割", "火花", "气割", "焊渣"]),
-#                 ("烟雾检测-大模型", ["白烟", "白雾", "蒸汽", "雾气", "冒烟", "浓烟", "烟雾", "尾气", "排烟","粉尘"]),
-#             ]
-#             # 循环匹配，命中立即返回
-#             for label, keywords in category_rules:
-#                 for kw in keywords:
-#                     if kw in analyse_desc:
-#                         for box in result:
-#                             box.classname = label
-#                             box.parames_vector = {"desc": analyse_desc,"keyword": kw}
-#                         return result
-#
-#             # 全部未匹配返回原始文本
-#             return []
-#         return []
-
-
-# -*- coding: utf-8 -*-
-# @Time    : 2025/6/5 15:54:21
-# @Author  : 陈澔麟
-# @File    : mindie_infer.py
+# # -*- coding: utf-8 -*-
+# # @Time    : 2025/6/5 15:54:21
+# # @Author  : 陈澔麟
+# # @File    : mindie_infer.py
 
 import os.path
-import cv2
-import numpy as np
+import traceback
+import ast
 from api.infer.Triton_model.triton_client import triton_inference
-from api.infer.Utils.boundingbox import BoundingBox
+import json
+from tools.logger_tools import CangQiong_Smart_Vllm_logger as logger_vllm
 
 
 class fire_infer(object):
@@ -158,47 +19,58 @@ class fire_infer(object):
         self.model_name = model_name
         self.mode = mode
         self.base_url = base_url + "/chat/completions"
-        vlm_server = os.getenv("TRITON_SERVER_VLM") or os.getenv("TRITON_SERVER")
-        self.tritonServer = triton_inference(
-            os.path.join(os.getenv("NEXUSAI_HOME"), "api", "infer", "Triton_model", "weights"),
-            urls=[vlm_server])
-
-    def infer(self, prompt: str, question: str, file=None) -> list:
-        # 获取图像尺寸，用于构造全图占位框
+        self.tritonServer = triton_inference(os.path.join(os.getenv("NEXUSAI_HOME"),"api","infer","Triton_model","weights"),
+                                urls=[os.getenv("VLLM_TRITON_SERVER")])
+    def _frame_infer(self, prompt: str, question: str, img_list: list):
+        """
+        多帧推理：跳过 YOLO，直接将已裁剪好的多帧图片列表送入 VLM 模型分析。
+        :param prompt: 系统提示词
+        :param question: 问题
+        :param img_list: 裁剪后的图片列表 (numpy.ndarray)
+        :return: 识别结果列表
+        """
+        return_result = []
         try:
-            if isinstance(file, bytes):
-                arr = np.frombuffer(file, np.uint8)
-                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                img_h, img_w = img.shape[:2]
-            elif isinstance(file, str):
-                img = cv2.imread(file)
-                img_h, img_w = img.shape[:2]
-            else:
-                img_h, img_w = file.shape[:2]
-        except Exception:
-            img_h, img_w = 1080, 1920
+            if not img_list:
+                return []
 
-        result = self.tritonServer.fire_run("fastvlm_fire", file)
-        if len(result) == 0:
-            return []
+            # 直接调用 VLM 模型 (cangqiong_4b) 处理多帧
+            result_fire = self.tritonServer.run(
+                "cangqiong_4b",
+                img_list,
+                label_to_detect={'desc_fire': {'iou': 1, 'conf': 1}}
+            )
 
-        result_to_return = result[0]
-        label_str = result_to_return.parames_vector.get('idcard', '无')
+            if len(result_fire) == 0:
+                return []
 
-        if label_str == "无":
-            return []
-        elif "火星" in label_str:
-            classname = "动火作业-大模型"
-        elif "火" in label_str:
-            classname = "火情检测-大模型"
-        elif "吸烟" in label_str:
-            classname = "吸烟检测-大模型"
-        elif "烟" in label_str:
-            classname = "烟雾检测-大模型"
-        else:
-            return []
+            analyse_desc = result_fire[0].parames_vector.get('analyse_desc', '')
+            logger_vllm.info(f"frame_infer analyse_desc: {analyse_desc}")
 
-        # fastvlm_fire 是全图分类模型，无空间坐标，用左上角 1×1 点占位满足 List[BoundingBox] 接口
-        box = BoundingBox(0, 1.0, 0, 1, 0, 1, img_w, img_h,
-                          classname, parames_vector={"desc": label_str})
-        return [box]
+            # 解析 JSON 结果（兼容旧 Python 字典格式）
+            parsed_desc = {}
+            try:
+                parsed_desc = json.loads(analyse_desc)
+            except Exception:
+                # 仅解析字面量，禁止执行模型输出
+                try:
+                    parsed_desc = ast.literal_eval(analyse_desc)
+                except Exception:
+                    parsed_desc = {"raw": analyse_desc}
+
+            logger_vllm.info(f"frame_infer parsed: {parsed_desc}")
+
+            # 构建返回结果
+            is_alarm = parsed_desc.get("has_fire_smoke", False)
+            reason = parsed_desc.get("reason", analyse_desc)
+
+            return_result = [{
+                "desc": reason,
+                "has_fire_smoke": is_alarm
+            }]
+
+        except Exception as e:
+            logger_vllm.error(f"frame_infer 异常: {traceback.format_exc()}")
+
+        return return_result
+

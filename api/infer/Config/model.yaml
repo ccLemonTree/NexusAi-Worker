@@ -160,12 +160,12 @@ Smoking-handsmoking:
 Phone-handphone:
   0:
     label:
-      - personnew
+      - sam3_Person
   1:
     label:
-      - hand_phone
+      - sam3_Phone
   param:
-    - conf: 0.8
+    - conf: 0.85
       desc: 置信度
     - iou: 0.2
       desc: 重叠度
@@ -243,15 +243,14 @@ Ztctest-cls:
       - dwztc
   1:
     label:
-      - ztc_mutil
+      - sam3_construction waste
   param:
     - conf: 0.8
       desc: 置信度
     - iou: 0.2
       desc: 重叠度
   label_desc: 渣土车未盖篷布
-  show: false
-
+  show: true
 
 Safehead-person:
   0:
@@ -311,7 +310,7 @@ Fall-person:
 Hot-work:
   0:
     label:
-      - 26_hotwork
+      - rf_start
   1:
     label:
       - personnew
@@ -324,18 +323,31 @@ Hot-work:
   show: true
 
 
+Ocr-pp:
+  0:
+    label:
+      - ocr
+  param:
+    - conf: 0.75
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 人流量识别
+  show: true
+
+
 Parcel-person:
   0:
     label:
       - sam3_Person
-  1:
-    label:
       - sam3_Cardboard box
   param:
     - conf: 0.85
       desc: 置信度
     - iou: 0.2
       desc: 重叠度
+    - box_conf: 0.8
+      desc: 重排序置信度
   label_desc: 人拿包裹
   show: true
 
@@ -358,8 +370,6 @@ Charging-gun:
   0:
     label:
       - sam3_ev charging gun
-  1:
-    label:
       - sam3_Car
   param:
     - conf: 0.85
@@ -367,4 +377,119 @@ Charging-gun:
     - iou: 0.2
       desc: 重叠度
   label_desc: 充电枪未归位
+  show: true
+
+Exceeds-num:
+  0:
+    label:
+      - personnew
+  1:
+    label:
+      - personnew
+  param:
+    - conf: 0.8
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+    - num: 5
+      desc: 计数人数
+  label_desc: 人员计数
+  show: true
+
+# 大面积地面垃圾识别
+
+Trash-big:
+  0:
+    label:
+      - sam3_Litter
+  1:
+    label:
+      - sam3_Litter
+  param:
+    - conf: 0.8
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 大面积地面垃圾
+  show: true
+
+#流浪狗识别
+Stray-dog:
+  0:
+    label:
+      - sam3_Dog
+      - sam3_Person
+  param:
+    - conf: 0.8
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 流浪狗识别
+  show: true
+
+#人贴广告
+Sticker-person:
+  0:
+    label:
+      - sam3_Advertisement sticker
+      - sam3_Paper notice
+      - sam3_Person
+  param:
+    - conf: 0.8
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 贴小广告
+  show: true
+
+Fishing-person:
+  0:
+    label:
+      - sam3_Fishing rod
+      - sam3_Person
+  param:
+    - conf: 0.8
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 钓鱼
+  show: true
+
+Dog-leash:
+  0:
+    label:
+      - sam3_Dog
+      - sam3_Person
+      - sam3_Leash
+  param:
+    - conf: 0.8
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 遛狗未牵绳
+  show: true
+
+
+chushai-fire:
+  0:
+    label:
+      - rf_firemd
+  param:
+    - conf: 0.2
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 初筛火情
+  show: true
+
+chushai-smoke:
+  0:
+    label:
+      - rf_smokemd
+  param:
+    - conf: 0.2
+      desc: 置信度
+    - iou: 0.2
+      desc: 重叠度
+  label_desc: 初筛烟雾
   show: true
