@@ -212,47 +212,60 @@ async def run_vlm_tasks(
 # 小模型推理
 # ---------------------------------------------------------------------------
 
-def _call_model_sync(img: np.ndarray, entry: dict) -> dict:
-    """
-    在线程池中同步执行单条 label 的小模型推理。
-    entry 对应 LabelEntry.dict()
-    """
-    alarm_type_id = entry["alarmTypeId"]
-    try:
-        # inferLabels 可能是逗号分隔的多标签
-        infer_labels = {
-            lbl.strip() for lbl in entry["inferLabels"].split(",") if lbl.strip()
+def _call_models_sync(img: np.ndarray, entries: list) -> list:
+    """同一张图只推理一次，再按每条告警自己的置信度拆分结果。"""
+    parsed = []
+    label_rules = {}
+    for entry in entries:
+        try:
+            labels = {lbl.strip() for lbl in entry["inferLabels"].split(",") if lbl.strip()}
+            details = json.loads(entry["labelDetails"])
+            conf = float(details[0].get("conf", 0.5))
+            iou = float(details[1].get("iou", 0.2))
+            parsed.append((labels, conf))
+            for label in labels:
+                if label not in label_rules or conf < label_rules[label]["conf"]:
+                    label_rules[label] = {"conf": conf, "iou": iou}
+        except Exception as e:
+            logger.error(f"小模型推理失败 alarmTypeId={entry['alarmTypeId']}: {e}", exc_info=True)
+            parsed.append((set(), 0))
+
+    requested_labels = set(label_rules)
+    for label in requested_labels & cfg.logicModelDict.keys():
+        for first_stage_label in cfg.logicModelDict[label][0]["label"]:
+            rule = label_rules[label]
+            if first_stage_label not in label_rules or rule["conf"] < label_rules[first_stage_label]["conf"]:
+                label_rules[first_stage_label] = rule
+
+    result = {}
+    if label_rules:
+        try:
+            camera_info = CameraInfo()
+            camera_info.imgsList = [img]
+            camera_info.deviceId = ""
+            camera_info.presetId = "0"
+            result = _run_analyse_sync(camera_info, requested_labels, label_rules)
+        except Exception as e:
+            logger.error(f"小模型推理失败: {e}", exc_info=True)
+
+    return [
+        {
+            "alarmTypeId": entry["alarmTypeId"],
+            "bbox": [
+                box for label in labels
+                for box in result.get(label, {}).get("bbox", [])
+                if box["confidence"] > conf
+            ],
         }
-        # labelDetails 格式：[{"conf":"0.2","desc":"..."}, {"iou":0.2,"desc":"..."}]
-        details = json.loads(entry["labelDetails"])
-        conf = float(details[0].get("conf", 0.5))
-        iou  = float(details[1].get("iou",  0.2))
-        label_rules = {lbl: {"conf": conf, "iou": iou} for lbl in infer_labels}
-
-        camera_info = CameraInfo()
-        camera_info.imgsList = [img]
-        camera_info.deviceId  = ""
-        camera_info.presetId  = "0"
-
-        result = _run_analyse_sync(camera_info, infer_labels, label_rules)
-
-        # 展平所有 bbox，统一挂上 alarmTypeId
-        all_bbox = []
-        for v in result.values():
-            all_bbox.extend(v.get("bbox", []))
-
-        return {"alarmTypeId": alarm_type_id, "bbox": all_bbox}
-
-    except Exception as e:
-        logger.error(f"小模型推理失败 alarmTypeId={alarm_type_id}: {e}", exc_info=True)
-        return {"alarmTypeId": alarm_type_id, "bbox": []}
+        for entry, (labels, conf) in zip(entries, parsed)
+    ]
 
 
 async def run_model_tasks(
     img: np.ndarray, labels: list
 ) -> Tuple[List[dict], str, str]:
     """
-    并发执行多条 label 的小模型推理，每条带自己的 alarmTypeId。
+    合并同图标签执行一次小模型推理，每条保留自己的 alarmTypeId。
     返回 (结果列表, modelStartTime, modelTime)
     超时时间由 MODEL_TIMEOUT 环境变量控制（默认 30s）。
     """
@@ -261,13 +274,9 @@ async def run_model_tasks(
     model_start = _now_iso()
     t0 = _time.monotonic()  # 用于精确计时
 
-    tasks = [
-        loop.run_in_executor(executor, _call_model_sync, img, entry)
-        for entry in labels
-    ]
     try:
-        raw_results = await asyncio.wait_for(
-            asyncio.gather(*tasks, return_exceptions=True),
+        results = await asyncio.wait_for(
+            loop.run_in_executor(executor, _call_models_sync, img, labels),
             timeout=MODEL_TIMEOUT,
         )
     except asyncio.TimeoutError:
@@ -279,14 +288,6 @@ async def run_model_tasks(
         )
 
     model_end = _now_iso()
-    results: List[dict] = []
-    for i, r in enumerate(raw_results):
-        if isinstance(r, Exception):
-            logger.error(f"model task[{i}] 异常: {r}")
-            results.append({"alarmTypeId": labels[i]["alarmTypeId"], "bbox": []})
-        else:
-            results.append(r)
-
     # 计算总耗时并记录（使用 monotonic 精确计时）
     elapsed = _time.monotonic() - t0
     logger.info(f"小模型推理完成 耗时={elapsed:.3f}s  labels={len(labels)}条")
