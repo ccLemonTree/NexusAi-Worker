@@ -13,7 +13,7 @@ from api.infer.Triton_model.sam3.sam3_detector import sam3
 from api.infer.Triton_model.yolov11det.yolov11_detector import yolov11det
 from api.infer.Triton_model.yolov11cls.yolov11cls_detector import yolov11cls
 from api.infer.Triton_model.fastvlm.fastvlm_detector import fastvlm_detector
-from tools.concurrency import get_triton_pool, get_triton_pool_smoking, get_vllm_triton_pool
+from tools.concurrency import get_triton_pool, get_triton_pool_smoking, get_vllm_triton_pool,get_triton_pool_sam3
 from api.infer.Triton_model.yolov26det.yolov26_detector import yolov26det
 from api.infer.Triton_model.ocr.ocr_detector import ocr_det
 from api.infer.Triton_model.rfdetr.rfdetr_detector import rfdetr

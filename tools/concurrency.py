@@ -138,7 +138,7 @@ def get_triton_pool() -> TritonClientPool:
     return _triton_pool
 
 
-def get_triton_pool_vlm() -> TritonClientPool:
+def get_vllm_triton_pool() -> TritonClientPool:
     """大模型（fastvlm 等）专用连接池，指向独立的 Triton VLM 部署。
     若未配置 TRITON_SERVER_VLM，退回到 TRITON_SERVER（向后兼容）。
     池大小由 TRITON_VLM_POOL_SIZE 控制（默认 40），独立于普通池的 TRITON_POOL_SIZE。"""
@@ -160,3 +160,12 @@ def get_triton_pool_sam3() -> TritonClientPool:
         pool_size = int(os.getenv("TRITON_SAM3_POOL_SIZE", "20"))
         _triton_pool_sam3 = TritonClientPool(url=url, pool_size=pool_size)
     return _triton_pool_sam3
+
+def get_triton_pool_smoking() -> TritonClientPool:
+    """yolov11det 专用连接池，指向独立的 triton-smoking 部署。
+    若未配置 TRITON_SERVER_SMOKING，退回到 TRITON_SERVER（向后兼容）。"""
+    global _triton_pool_smoking
+    if _triton_pool_smoking is None:
+        url = os.getenv("TRITON_SERVER_SMOKING") or os.getenv("TRITON_SERVER", "localhost:8001")
+        _triton_pool_smoking = TritonClientPool(url=url)
+    return _triton_pool_smoking
