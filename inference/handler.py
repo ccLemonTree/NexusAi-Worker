@@ -116,7 +116,9 @@ async def load_image(path: str, eos: bool) -> Optional[np.ndarray]:
             )
             elapsed = _time.monotonic() - t0
             arr = np.frombuffer(data, np.uint8)
-            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            img = await asyncio.get_running_loop().run_in_executor(
+                io_executor, cv2.imdecode, arr, cv2.IMREAD_COLOR
+            )
             if img is None:
                 raise ValueError("cv2.imdecode 返回 None，可能不是合法图片")
             logger.info(f"EOS 图片下载成功 耗时={elapsed:.3f}s  size={len(data)}B  key={path[:120]}")

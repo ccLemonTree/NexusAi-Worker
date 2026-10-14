@@ -79,8 +79,6 @@ def yolov5(triton_client, service_name, init_data, img, label_rules,box_info, co
                                       outputs=outputs,
                                       model_version=model_version,
                                       client_timeout=30000)
-        for output in OUTPUT_DATA:
-            results.as_numpy(output["name"])
         for obj in OUTPUT_DATA:
             output_data.append(results.as_numpy(obj["name"]))
 
@@ -93,8 +91,10 @@ def yolov5(triton_client, service_name, init_data, img, label_rules,box_info, co
         time_json["processing_time"] = postprocessing_end - postprocessing_start
         return result_to_return, time_json
 
-    # postprocess 不做置信度过滤（传 0.0），由后续的独立阈值过滤
-    detected_objects = postprocess(output_data[0], img.shape[1], img.shape[0], input_shape, 0.0,
+    # BoundingBox 会将置信度四舍五入到两位，预过滤需保留这部分边界候选框。
+    lowest_conf = min((rule["conf"] for rule in label_thresholds.values()), default=conf_thres)
+    nms_conf = max(0.0, lowest_conf - 0.005)
+    detected_objects = postprocess(output_data[0], img.shape[1], img.shape[0], input_shape, nms_conf,
                                           iou_thres, label_names)
     detects = list(label_rules.keys())
     for i in range(len(detected_objects)):
